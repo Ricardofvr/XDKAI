@@ -40,6 +40,20 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
         config = load_config()
         return LocalOpenAIRuntime(config.runtime, logging.getLogger("test.runtime.local_openai"))
 
+    def _provider_model_ids(self) -> tuple[str, str]:
+        config = load_config()
+        generation_id = next(
+            model.provider_model_id
+            for model in config.runtime.models
+            if model.public_name == "local-general"
+        )
+        embedding_id = next(
+            model.provider_model_id
+            for model in config.runtime.models
+            if model.public_name == "local-embedding"
+        )
+        return generation_id, embedding_id
+
     def _chat_request(self) -> ChatGenerationRequest:
         return ChatGenerationRequest(
             model="local-general",
@@ -58,13 +72,14 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
 
     def test_model_resolution_uses_provider_model_id(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
         captured_model = {"value": None}
 
         def fake_urlopen(req, timeout=0):
             if req.full_url.endswith("/health"):
                 return _MockHTTPResponse()
             if req.full_url.endswith("/v1/models"):
-                return _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]})
+                return _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]})
             if req.full_url.endswith("/v1/chat/completions"):
                 body = json.loads(req.data.decode("utf-8"))
                 captured_model["value"] = body.get("model")
@@ -86,19 +101,20 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
             runtime.startup()
             response = runtime.generate_chat(self._chat_request())
 
-        self.assertEqual(captured_model["value"], "llama3.2-general")
+        self.assertEqual(captured_model["value"], generation_id)
         self.assertEqual(response.choices[0].message.content, "real provider output")
         self.assertEqual(response.usage["total_tokens"], 7)
 
     def test_embedding_model_resolution_uses_provider_model_id(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
         captured_model = {"value": None}
 
         def fake_urlopen(req, timeout=0):
             if req.full_url.endswith("/health"):
                 return _MockHTTPResponse()
             if req.full_url.endswith("/v1/models"):
-                return _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]})
+                return _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]})
             if req.full_url.endswith("/v1/embeddings"):
                 body = json.loads(req.data.decode("utf-8"))
                 captured_model["value"] = body.get("model")
@@ -115,18 +131,19 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
             runtime.startup()
             response = runtime.generate_embeddings(self._embedding_request())
 
-        self.assertEqual(captured_model["value"], "nomic-embed-text")
+        self.assertEqual(captured_model["value"], embedding_id)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0].embedding, [0.1, 0.2, 0.3])
 
     def test_chat_timeout_raises_runtime_unavailable(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
 
         with patch(
             "backend.runtime.providers.local_openai.request.urlopen",
             side_effect=[
                 _MockHTTPResponse(),
-                _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]}),
+                _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]}),
                 TimeoutError("timed out"),
             ],
         ):
@@ -136,12 +153,13 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
 
     def test_embeddings_timeout_raises_runtime_unavailable(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
 
         with patch(
             "backend.runtime.providers.local_openai.request.urlopen",
             side_effect=[
                 _MockHTTPResponse(),
-                _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]}),
+                _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]}),
                 TimeoutError("timed out"),
             ],
         ):
@@ -151,12 +169,13 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
 
     def test_malformed_chat_response_raises_runtime_invocation_error(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
 
         with patch(
             "backend.runtime.providers.local_openai.request.urlopen",
             side_effect=[
                 _MockHTTPResponse(),
-                _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]}),
+                _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]}),
                 _MockHTTPResponse(payload={"choices": "invalid"}),
             ],
         ):
@@ -166,12 +185,13 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
 
     def test_malformed_embeddings_response_raises_runtime_invocation_error(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
 
         with patch(
             "backend.runtime.providers.local_openai.request.urlopen",
             side_effect=[
                 _MockHTTPResponse(),
-                _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]}),
+                _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]}),
                 _MockHTTPResponse(payload={"data": [{"index": 0, "embedding": "invalid"}]}),
             ],
         ):
@@ -181,6 +201,7 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
 
     def test_provider_error_payload_is_normalized(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
         provider_error = error.HTTPError(
             url="http://127.0.0.1:8081/v1/chat/completions",
             code=400,
@@ -193,7 +214,7 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
             "backend.runtime.providers.local_openai.request.urlopen",
             side_effect=[
                 _MockHTTPResponse(),
-                _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]}),
+                _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]}),
                 provider_error,
             ],
         ):
@@ -205,6 +226,7 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
 
     def test_provider_error_payload_is_normalized_for_embeddings(self) -> None:
         runtime = self._build_runtime()
+        generation_id, embedding_id = self._provider_model_ids()
         provider_error = error.HTTPError(
             url="http://127.0.0.1:8081/v1/embeddings",
             code=400,
@@ -217,7 +239,7 @@ class LocalOpenAIRuntimeTests(unittest.TestCase):
             "backend.runtime.providers.local_openai.request.urlopen",
             side_effect=[
                 _MockHTTPResponse(),
-                _MockHTTPResponse(payload={"data": [{"id": "llama3.2-general"}, {"id": "nomic-embed-text"}]}),
+                _MockHTTPResponse(payload={"data": [{"id": generation_id}, {"id": embedding_id}]}),
                 provider_error,
             ],
         ):

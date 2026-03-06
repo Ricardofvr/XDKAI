@@ -27,11 +27,13 @@ class ControllerService:
         runtime_manager: RuntimeManager,
         logger: logging.Logger,
         startup_state: dict[str, bool],
+        rag_vector_store: Any | None = None,
     ) -> None:
         self._config = config
         self._runtime_manager = runtime_manager
         self._logger = logger
         self._startup_state = startup_state
+        self._rag_vector_store = rag_vector_store
 
         # Week 2 placeholders for future orchestrated subsystems.
         self._policy_manager = None
@@ -71,6 +73,7 @@ class ControllerService:
             "runtime": runtime_status,
             "runtime_metadata": self._runtime_manager.get_metadata(),
             "model_registry": self._runtime_manager.get_model_registry_payload(),
+            "rag_index": self._get_rag_index_status(),
             "feature_flags": {
                 "openai_compatible_api": self._config.feature_flags.openai_compatible_api,
                 "tool_execution": self._config.feature_flags.tool_execution,
@@ -84,6 +87,45 @@ class ControllerService:
                 "research_manager": "deferred",
             },
         }
+
+    def mark_startup_step(self, step_name: str, completed: bool = True) -> None:
+        self._startup_state[step_name] = completed
+
+    def _get_rag_index_status(self) -> dict[str, Any]:
+        if self._rag_vector_store is None:
+            return {
+                "enabled": False,
+                "initialized": False,
+                "documents_indexed": 0,
+                "total_vectors": 0,
+                "embedding_models": [],
+                "index_location": None,
+            }
+
+        try:
+            status = self._rag_vector_store.get_status_payload()
+            return {
+                "enabled": bool(self._config.rag.enabled),
+                **status,
+                "default_embedding_model": self._config.rag.default_embedding_model,
+            }
+        except Exception as exc:  # noqa: BLE001
+            self._logger.exception(
+                "controller_rag_status_failed",
+                extra={
+                    "event": "controller_status",
+                    "error": str(exc),
+                },
+            )
+            return {
+                "enabled": bool(self._config.rag.enabled),
+                "initialized": False,
+                "documents_indexed": 0,
+                "total_vectors": 0,
+                "embedding_models": [],
+                "index_location": self._config.rag.index.directory,
+                "error": str(exc),
+            }
 
     def list_models(self) -> dict[str, Any]:
         self._logger.info("controller_list_models", extra={"event": "controller_route", "route": "list_models"})

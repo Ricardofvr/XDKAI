@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.6.0-week6",
+    "version": "0.7.0-week7",
     "environment": "development"
   },
   "api": {
@@ -24,22 +24,22 @@
     "models": [
       {
         "public_name": "local-general",
-        "provider_model_id": "llama3.2-general",
+        "provider_model_id": "qwen2.5-32b-general",
         "role": "general",
         "enabled": true,
         "metadata": {
-          "description": "Primary local general assistant model",
-          "stage": "week5-real-inference"
+          "description": "Primary local Qwen2.5 32B general assistant model",
+          "stage": "week7-qwen32b"
         }
       },
       {
         "public_name": "local-coder",
-        "provider_model_id": "qwen2.5-coder",
+        "provider_model_id": "qwen2.5-32b-coder",
         "role": "coder",
-        "enabled": false,
+        "enabled": true,
         "metadata": {
-          "description": "Reserved for coding-focused flow",
-          "stage": "planned"
+          "description": "Qwen2.5 32B coding-focused model",
+          "stage": "week7-qwen32b"
         }
       },
       {
@@ -70,6 +70,20 @@
     "tool_execution": false,
     "memory": false,
     "research": false
+  },
+  "rag": {
+    "enabled": true,
+    "default_embedding_model": "local-embedding",
+    "chunking": {
+      "chunk_size": 1000,
+      "chunk_overlap": 200
+    },
+    "index": {
+      "directory": "data/index",
+      "vectors_db_filename": "vectors.db",
+      "documents_filename": "documents.json",
+      "metadata_filename": "metadata.json"
+    }
   },
   "placeholders": {
     "policy_rules": {

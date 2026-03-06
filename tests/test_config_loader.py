@@ -13,6 +13,8 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertEqual(config.runtime.provider, "local_openai")
         self.assertTrue(config.runtime.allow_fallback_to_placeholder)
         self.assertEqual(config.runtime.default_embedding_model, "local-embedding")
+        self.assertTrue(config.rag.enabled)
+        self.assertEqual(config.rag.default_embedding_model, "local-embedding")
 
     def test_load_config_from_explicit_path(self) -> None:
         config = load_config(Path("config/portable-ai-drive-pro.json"))
@@ -27,6 +29,13 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertTrue(first_model.provider_model_id)
         self.assertIn(first_model.role, {"general", "coder", "embedding"})
         self.assertIsInstance(first_model.enabled, bool)
+
+    def test_rag_chunking_and_index_settings_are_loaded(self) -> None:
+        config = load_config()
+        self.assertGreater(config.rag.chunking.chunk_size, 0)
+        self.assertGreaterEqual(config.rag.chunking.chunk_overlap, 0)
+        self.assertTrue(config.rag.index.directory)
+        self.assertTrue(config.rag.index.vectors_db_filename.endswith(".db"))
 
 
 if __name__ == "__main__":

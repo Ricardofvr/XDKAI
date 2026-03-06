@@ -13,6 +13,9 @@ from .schema import (
     LoggingConfig,
     OperatingModeConfig,
     PlaceholderConfig,
+    RagChunkingConfig,
+    RagConfig,
+    RagIndexConfig,
     RuntimeConfig,
     RuntimeModelConfig,
 )
@@ -168,6 +171,90 @@ def _parse_local_openai_config(runtime_section: dict[str, Any], startup_timeout_
     )
 
 
+def _parse_rag_config(
+    data: dict[str, Any],
+    enabled_embedding_names: set[str],
+    runtime_default_embedding_model: str | None,
+) -> RagConfig:
+    rag_section_raw = data.get("rag", {})
+    if not isinstance(rag_section_raw, dict):
+        raise ConfigError("Config section 'rag' must be an object when provided.")
+
+    rag_enabled = rag_section_raw.get("enabled", True)
+    if not isinstance(rag_enabled, bool):
+        raise ConfigError("Config value 'rag.enabled' must be a boolean.")
+
+    rag_default_embedding_model = rag_section_raw.get("default_embedding_model", runtime_default_embedding_model)
+    if rag_default_embedding_model is not None and (
+        not isinstance(rag_default_embedding_model, str) or not rag_default_embedding_model.strip()
+    ):
+        raise ConfigError("Config value 'rag.default_embedding_model' must be a non-empty string or null.")
+
+    if rag_enabled and not rag_default_embedding_model:
+        raise ConfigError(
+            "Config value 'rag.default_embedding_model' must be set when rag.enabled=true, "
+            "or runtime.default_embedding_model must be configured."
+        )
+
+    if rag_default_embedding_model and rag_default_embedding_model not in enabled_embedding_names:
+        raise ConfigError(
+            "Config value 'rag.default_embedding_model' must match an enabled runtime model with role embedding."
+        )
+
+    chunking_section = rag_section_raw.get("chunking", {})
+    if not isinstance(chunking_section, dict):
+        raise ConfigError("Config value 'rag.chunking' must be an object when provided.")
+
+    chunk_size = chunking_section.get("chunk_size", 1000)
+    chunk_overlap = chunking_section.get("chunk_overlap", 200)
+    if not isinstance(chunk_size, int) or chunk_size <= 0:
+        raise ConfigError("Config value 'rag.chunking.chunk_size' must be a positive integer.")
+    if not isinstance(chunk_overlap, int) or chunk_overlap < 0:
+        raise ConfigError("Config value 'rag.chunking.chunk_overlap' must be an integer >= 0.")
+    if chunk_overlap >= chunk_size:
+        raise ConfigError("Config value 'rag.chunking.chunk_overlap' must be smaller than chunk_size.")
+
+    index_section = rag_section_raw.get("index", {})
+    if not isinstance(index_section, dict):
+        raise ConfigError("Config value 'rag.index' must be an object when provided.")
+
+    index_directory = index_section.get("directory", "data/index")
+    if not isinstance(index_directory, str) or not index_directory.strip():
+        raise ConfigError("Config value 'rag.index.directory' must be a non-empty string.")
+
+    resolved_index_dir = Path(index_directory)
+    if not resolved_index_dir.is_absolute():
+        resolved_index_dir = (PROJECT_ROOT / resolved_index_dir).resolve()
+
+    vectors_db_filename = index_section.get("vectors_db_filename", "vectors.db")
+    documents_filename = index_section.get("documents_filename", "documents.json")
+    metadata_filename = index_section.get("metadata_filename", "metadata.json")
+    for key, value in (
+        ("vectors_db_filename", vectors_db_filename),
+        ("documents_filename", documents_filename),
+        ("metadata_filename", metadata_filename),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"Config value 'rag.index.{key}' must be a non-empty string.")
+        if "/" in value or "\\" in value:
+            raise ConfigError(f"Config value 'rag.index.{key}' must be a filename, not a path.")
+
+    return RagConfig(
+        enabled=rag_enabled,
+        default_embedding_model=rag_default_embedding_model,
+        chunking=RagChunkingConfig(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        ),
+        index=RagIndexConfig(
+            directory=str(resolved_index_dir),
+            vectors_db_filename=vectors_db_filename,
+            documents_filename=documents_filename,
+            metadata_filename=metadata_filename,
+        ),
+    )
+
+
 def load_config(config_path: str | Path | None = None) -> AppConfig:
     path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
     if not path.exists():
@@ -247,6 +334,11 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
         )
 
     local_openai = _parse_local_openai_config(runtime_section, startup_timeout_seconds)
+    rag_config = _parse_rag_config(
+        data=data,
+        enabled_embedding_names=enabled_embedding_names,
+        runtime_default_embedding_model=default_embedding_model,
+    )
 
     app_config = AppConfig(
         app=AppIdentityConfig(
@@ -285,6 +377,7 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
             memory=_require_bool(feature_flags_section, "memory", "feature_flags"),
             research=_require_bool(feature_flags_section, "research", "feature_flags"),
         ),
+        rag=rag_config,
         placeholders=PlaceholderConfig(
             policy_rules=_optional_dict(placeholders_section, "policy_rules", "placeholders"),
             tool_permissions=_optional_dict(placeholders_section, "tool_permissions", "placeholders"),

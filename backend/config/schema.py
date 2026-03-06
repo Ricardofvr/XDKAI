@@ -70,6 +70,28 @@ class FeatureFlagsConfig:
 
 
 @dataclass(frozen=True)
+class RagChunkingConfig:
+    chunk_size: int
+    chunk_overlap: int
+
+
+@dataclass(frozen=True)
+class RagIndexConfig:
+    directory: str
+    vectors_db_filename: str
+    documents_filename: str
+    metadata_filename: str
+
+
+@dataclass(frozen=True)
+class RagConfig:
+    enabled: bool
+    default_embedding_model: str | None
+    chunking: RagChunkingConfig
+    index: RagIndexConfig
+
+
+@dataclass(frozen=True)
 class PlaceholderConfig:
     policy_rules: dict[str, Any] = field(default_factory=dict)
     tool_permissions: dict[str, Any] = field(default_factory=dict)
@@ -85,5 +107,6 @@ class AppConfig:
     runtime: RuntimeConfig
     operating_mode: OperatingModeConfig
     feature_flags: FeatureFlagsConfig
+    rag: RagConfig
     placeholders: PlaceholderConfig
     raw: dict[str, Any] = field(default_factory=dict, repr=False)

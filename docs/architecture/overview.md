@@ -31,7 +31,7 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 6)
+## Implemented Shape (Week 7)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
@@ -40,6 +40,9 @@ Current implementation is in `backend/`:
 - `backend/runtime/`: runtime interfaces, provider adapters, provider selection factory, runtime manager
 - `backend/controller/`: orchestration boundary for introspection, chat completions, and embeddings
 - `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility endpoints
+- `backend/rag/chunking/`: deterministic document chunking
+- `backend/rag/vector_store/`: persistent local vector storage + index metadata
+- `backend/rag/indexer.py`: indexing pipeline + CLI entrypoint
 
 ## Startup Sequence
 1. Load config from `config/portable-ai-drive-pro.json`.
@@ -47,9 +50,10 @@ Current implementation is in `backend/`:
 3. Build selected runtime provider backend from config.
 4. Start runtime manager lifecycle.
 5. If selected provider is unavailable, optionally engage placeholder fallback.
-6. Initialize controller with runtime manager.
-7. Initialize API server and route bindings.
-8. Start serving local requests.
+6. Initialize RAG vector store (`data/index/*`).
+7. Initialize controller with runtime manager + RAG status provider.
+8. Initialize API server and route bindings.
+9. Start serving local requests.
 
 ## Runtime Provider Selection
 Runtime provider is selected through `runtime.provider` in config.
@@ -103,6 +107,37 @@ Model resolution rules:
 6. Adapter normalizes embedding vectors to internal contract.
 7. Controller assembles OpenAI-compatible embeddings response.
 
+## RAG Indexing Foundation (Week 7)
+### Indexing Pipeline
+`Indexer -> Controller -> RuntimeManager -> Runtime Adapter -> Embeddings -> VectorStore`
+
+`backend.rag.indexer` pipeline steps:
+1. Validate and read a plain-text file.
+2. Chunk text deterministically using configured `chunk_size` and `chunk_overlap`.
+3. Request embeddings through `ControllerService.create_embeddings()`.
+4. Persist document metadata + vectors in local vector store.
+5. Update JSON sidecar metadata files.
+
+### Index Storage Layout
+Default location: `data/index/`
+- `vectors.db`: SQLite database for vectors + document table.
+- `documents.json`: indexed document metadata snapshot.
+- `metadata.json`: index-level metadata snapshot.
+
+Tracked metadata includes:
+- `document_id`
+- `source_file`
+- `chunk_count`
+- `embedding_model`
+- `indexed_at_utc`
+
+### Current Scope Boundary
+Week 7 adds index creation only.
+Not implemented yet:
+- retrieval-time vector search
+- ranking
+- chat augmentation with retrieved context
+
 ## Failure and Timeout Handling
 Runtime adapter and runtime manager handle:
 - provider connection failure
@@ -114,15 +149,14 @@ Runtime adapter and runtime manager handle:
 
 Failures are logged with structured diagnostics and returned as structured API errors.
 
-## Runtime Readiness Semantics
-`GET /system/status` reports capability-separated readiness:
-- selected/active/fallback provider
+## Runtime and Index Readiness Semantics
+`GET /system/status` reports:
+- runtime selected/active/fallback provider
 - generation readiness + enabled generation models
 - embeddings readiness + enabled embedding models
 - provider reachability
-- primary provider status snapshot
-- model registry details
-- provider diagnostics (startup error, last chat/embeddings errors, latency)
+- provider diagnostics
+- `rag_index` status (initialized, documents indexed, total vectors, embedding models, index location)
 
 ## Streaming Readiness
 - Chat request schema supports `stream` field but streaming is not implemented yet.

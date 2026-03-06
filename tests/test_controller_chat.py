@@ -1,5 +1,8 @@
+import json
 import logging
+import tempfile
 import unittest
+from pathlib import Path
 
 from backend.config import load_config
 from backend.controller import ControllerRequestError, ControllerService
@@ -79,10 +82,53 @@ class ControllerChatTests(unittest.TestCase):
         self.assertEqual(err.exception.error_type, "model_not_found")
 
     def test_chat_completion_rejects_disabled_model(self) -> None:
-        controller, _ = self._build_controller()
+        data = json.loads(Path("config/portable-ai-drive-pro.json").read_text(encoding="utf-8"))
+        default_model = data["runtime"].get("default_model")
+
+        candidate = None
+        for model in data["runtime"]["models"]:
+            if model.get("role") in {"general", "coder"} and model.get("public_name") != default_model:
+                candidate = model
+                break
+        if candidate is None:
+            self.fail("Test config must include a non-default generation/coder model for disable validation.")
+
+        candidate["enabled"] = False
+        disabled_generation_model = candidate["public_name"]
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tmp:
+            tmp.write(json.dumps(data))
+            tmp_path = Path(tmp.name)
+
+        try:
+            config = load_config(tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        runtime = RuntimeManager(
+            primary_backend=PlaceholderRuntime(config.runtime),
+            fallback_backend=None,
+            selected_provider="placeholder",
+            fallback_provider=None,
+            logger=logging.getLogger("test.runtime"),
+        )
+        runtime.startup()
+
+        controller = ControllerService(
+            config=config,
+            runtime_manager=runtime,
+            logger=logging.getLogger("test.controller"),
+            startup_state={
+                "config_loaded": True,
+                "logging_initialized": True,
+                "runtime_initialized": True,
+                "controller_initialized": True,
+                "api_initialized": True,
+            },
+        )
 
         request = ChatGenerationRequest(
-            model="local-coder",
+            model=disabled_generation_model,
             messages=[ChatMessage(role="user", content="hello")],
             stream=False,
             request_id="req_123",
