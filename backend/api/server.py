@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from backend.controller import ControllerRequestError, ControllerService
 
 from .errors import ApiError, ApiValidationError
-from .openai_schema import parse_chat_completions_request
+from .openai_schema import parse_chat_completions_request, parse_embeddings_request
 
 
 class _ReusableThreadingHTTPServer(ThreadingHTTPServer):
@@ -129,6 +129,12 @@ def _build_request_handler(controller: ControllerService, logger: logging.Logger
                 payload = self._read_json_body(request_id=request_id)
                 chat_request = parse_chat_completions_request(payload, request_id=request_id)
                 response = controller.create_chat_completion(chat_request)
+                return HTTPStatus.OK, response
+
+            if method == "POST" and path == "/v1/embeddings":
+                payload = self._read_json_body(request_id=request_id)
+                embeddings_request = parse_embeddings_request(payload, request_id=request_id)
+                response = controller.create_embeddings(embeddings_request)
                 return HTTPStatus.OK, response
 
             raise ApiError(

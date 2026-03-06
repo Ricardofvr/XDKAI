@@ -4,7 +4,12 @@ import unittest
 from backend.config import load_config
 from backend.controller import ControllerRequestError, ControllerService
 from backend.runtime import ChatGenerationRequest, ChatMessage, ModelInfo, PlaceholderRuntime, RuntimeManager
-from backend.runtime.interfaces import RuntimeInvocationError, RuntimeStatus
+from backend.runtime.interfaces import (
+    EmbeddingGenerationRequest,
+    EmbeddingGenerationResponse,
+    RuntimeInvocationError,
+    RuntimeStatus,
+)
 
 
 class ControllerChatTests(unittest.TestCase):
@@ -19,7 +24,9 @@ class ControllerChatTests(unittest.TestCase):
         )
         runtime.startup()
 
-        enabled_models = [model.public_name for model in config.runtime.models if model.enabled]
+        enabled_models = [
+            model.public_name for model in config.runtime.models if model.enabled and model.role in {"general", "coder"}
+        ]
         default_model = config.runtime.default_model or enabled_models[0]
 
         return (
@@ -86,6 +93,21 @@ class ControllerChatTests(unittest.TestCase):
 
         self.assertEqual(err.exception.error_type, "model_not_found")
 
+    def test_chat_completion_rejects_embedding_model(self) -> None:
+        controller, _ = self._build_controller()
+
+        request = ChatGenerationRequest(
+            model="local-embedding",
+            messages=[ChatMessage(role="user", content="hello")],
+            stream=False,
+            request_id="req_123",
+        )
+
+        with self.assertRaises(ControllerRequestError) as err:
+            controller.create_chat_completion(request)
+
+        self.assertEqual(err.exception.error_type, "model_not_found")
+
     def test_list_models_returns_openai_style_list(self) -> None:
         controller, model_name = self._build_controller()
         response = controller.list_models()
@@ -127,14 +149,18 @@ class ControllerChatTests(unittest.TestCase):
                     initialized=True,
                     ready=True,
                     generation_ready=True,
+                    embedding_ready=True,
                     provider_reachable=True,
                     active_model="local-general",
-                    models_available=["local-general"],
+                    models_available=["local-general", "local-embedding"],
                     details={},
                 )
 
             def list_models(self) -> list[ModelInfo]:
-                return [ModelInfo(id="local-general", provider_model_id="llama3.2-general")]
+                return [
+                    ModelInfo(id="local-general", role="general", provider_model_id="llama3.2-general"),
+                    ModelInfo(id="local-embedding", role="embedding", provider_model_id="nomic-embed-text"),
+                ]
 
             def list_configured_models(self) -> list[ModelInfo]:
                 return self.list_models()
@@ -148,8 +174,8 @@ class ControllerChatTests(unittest.TestCase):
             def stream_chat(self, request: ChatGenerationRequest):
                 raise NotImplementedError
 
-            def generate_embeddings(self, inputs, **kwargs):
-                raise NotImplementedError
+            def generate_embeddings(self, request: EmbeddingGenerationRequest) -> EmbeddingGenerationResponse:
+                raise RuntimeInvocationError("mock embeddings failure")
 
         runtime_manager = RuntimeManager(
             primary_backend=_FailingBackend(),

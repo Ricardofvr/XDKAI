@@ -2,8 +2,8 @@
 
 Portable AI Drive PRO is a local, offline-first, privacy-first AI operating environment under development in this repository.
 
-## Current Status (Week 5)
-Week 1 through Week 5 foundations are complete:
+## Current Status (Week 6)
+Week 1 through Week 6 foundations are complete:
 - Product and architecture definitions
 - Explicit trust boundaries and security model
 - Backend service skeleton with startup lifecycle
@@ -12,7 +12,9 @@ Week 1 through Week 5 foundations are complete:
 - Controller-orchestrated OpenAI-compatible API path
 - Runtime provider selection (`local_openai` + `placeholder` fallback)
 - Real local inference path through the runtime adapter when provider is available
-- Runtime/model readiness and diagnostics surfaced in `/system/status`
+- OpenAI-compatible embeddings endpoint (`POST /v1/embeddings`)
+- Capability separation for generation vs embeddings readiness in `/system/status`
+- Standard local Python virtual environment workflow (`.venv`) via `scripts/setup_venv.sh`
 
 ## Core Principles
 - Offline-first by default
@@ -32,6 +34,12 @@ Week 1 through Week 5 foundations are complete:
 - `api/`, `controller/`, `runtime/`, `tools/`, `rag/`, `memory/`, `research/`, `observability/`, `ui/`: Product module boundaries and docs
 
 ## Local Startup (WSL)
+Initialize the Python virtual environment:
+
+```bash
+./scripts/setup_venv.sh
+```
+
 Run the backend service:
 
 ```bash
@@ -44,14 +52,15 @@ Then check:
 - `GET http://127.0.0.1:8080/system/status`
 - `GET http://127.0.0.1:8080/v1/models`
 - `POST http://127.0.0.1:8080/v1/chat/completions`
+- `POST http://127.0.0.1:8080/v1/embeddings`
 
-## Real Inference Path (Week 5)
-Run a local OpenAI-compatible model server separately, then configure `runtime.local_openai.base_url` to that server.
+## Embeddings Path (Week 6)
+`/v1/embeddings` now routes through:
+`API -> Controller -> RuntimeManager -> Runtime Adapter`.
 
-When reachable and generation-ready, `/v1/chat/completions` returns a real model-generated response through:
-`API -> Controller -> RuntimeManager -> LocalOpenAIRuntime`.
+Embedding model selection is registry-driven (`role=embedding`) and does not assume generation model reuse.
 
-If unavailable, placeholder fallback can still keep local development flow operational.
+If runtime/provider embedding capability is unavailable, structured errors are returned and status surfaces degraded capability.
 
 ## Documentation Index
 Start with [docs/README.md](docs/README.md).

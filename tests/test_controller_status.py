@@ -38,6 +38,7 @@ class ControllerStatusTests(unittest.TestCase):
         self.assertIn("model_registry", status)
         self.assertEqual(status["runtime"]["provider"], "placeholder")
         self.assertIn("generation", status["runtime"])
+        self.assertIn("embeddings", status["runtime"])
 
 
 if __name__ == "__main__":

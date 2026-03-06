@@ -12,6 +12,7 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertTrue(config.operating_mode.offline_default)
         self.assertEqual(config.runtime.provider, "local_openai")
         self.assertTrue(config.runtime.allow_fallback_to_placeholder)
+        self.assertEqual(config.runtime.default_embedding_model, "local-embedding")
 
     def test_load_config_from_explicit_path(self) -> None:
         config = load_config(Path("config/portable-ai-drive-pro.json"))
@@ -24,7 +25,7 @@ class ConfigLoaderTests(unittest.TestCase):
 
         self.assertTrue(first_model.public_name)
         self.assertTrue(first_model.provider_model_id)
-        self.assertIn(first_model.role, {"general", "coder"})
+        self.assertIn(first_model.role, {"general", "coder", "embedding"})
         self.assertIsInstance(first_model.enabled, bool)
 
 

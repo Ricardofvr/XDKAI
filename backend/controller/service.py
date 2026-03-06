@@ -7,7 +7,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.config.schema import AppConfig
-from backend.runtime.interfaces import ChatGenerationRequest, RuntimeInvocationError, RuntimeUnavailableError
+from backend.runtime.interfaces import (
+    ChatGenerationRequest,
+    EmbeddingGenerationRequest,
+    RuntimeInvocationError,
+    RuntimeUnavailableError,
+)
 from backend.runtime.manager import RuntimeManager
 
 from .errors import ControllerRequestError
@@ -115,10 +120,10 @@ class ControllerService:
                 status_code=400,
             )
 
-        available_models = {model.id for model in self._runtime_manager.list_models()}
+        available_models = {model.id for model in self._runtime_manager.list_generation_models()}
         if request.model not in available_models:
             raise ControllerRequestError(
-                f"Model '{request.model}' is not available.",
+                f"Model '{request.model}' is not available for chat generation.",
                 error_type="model_not_found",
                 status_code=404,
             )
@@ -179,8 +184,76 @@ class ControllerService:
 
         return response
 
+    def create_embeddings(self, request: EmbeddingGenerationRequest) -> dict[str, Any]:
+        self._logger.info(
+            "controller_embeddings_received",
+            extra={
+                "event": "controller_route",
+                "route": "embeddings",
+                "model": request.model,
+                "input_count": len(request.input_texts),
+                "request_id": request.request_id,
+            },
+        )
+
+        available_models = {model.id for model in self._runtime_manager.list_embedding_models()}
+        if request.model not in available_models:
+            raise ControllerRequestError(
+                f"Model '{request.model}' is not available for embeddings.",
+                error_type="model_not_found",
+                status_code=404,
+            )
+
+        try:
+            runtime_response = self._runtime_manager.generate_embeddings(request)
+        except RuntimeUnavailableError as exc:
+            raise ControllerRequestError(
+                str(exc),
+                error_type="runtime_unavailable",
+                status_code=503,
+            ) from exc
+        except RuntimeInvocationError as exc:
+            raise ControllerRequestError(
+                str(exc),
+                error_type="runtime_invocation_error",
+                status_code=502,
+            ) from exc
+
+        if not runtime_response.data:
+            raise ControllerRequestError(
+                "Runtime returned no embeddings.",
+                error_type="runtime_error",
+                status_code=500,
+            )
+
+        response = {
+            "object": "list",
+            "data": [
+                {
+                    "object": "embedding",
+                    "index": item.index,
+                    "embedding": item.embedding,
+                }
+                for item in runtime_response.data
+            ],
+            "model": runtime_response.model,
+            "usage": runtime_response.usage,
+        }
+
+        self._logger.info(
+            "controller_embeddings_ready",
+            extra={
+                "event": "controller_route",
+                "route": "embeddings",
+                "request_id": request.request_id,
+                "embedding_count": len(runtime_response.data),
+            },
+        )
+
+        return response
+
     def dispatch_tool(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError("Tool dispatch is deferred to Week 6+")
+        raise NotImplementedError("Tool dispatch is deferred to Week 7+")
 
     def validate_policy(self, action: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError("Policy validation is deferred to Week 6+")
+        raise NotImplementedError("Policy validation is deferred to Week 7+")

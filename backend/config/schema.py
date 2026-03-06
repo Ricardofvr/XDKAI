@@ -41,6 +41,7 @@ class LocalOpenAIProviderConfig:
     health_path: str
     models_path: str
     chat_completions_path: str
+    embeddings_path: str
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ class RuntimeConfig:
     fallback_provider: str | None
     allow_fallback_to_placeholder: bool
     default_model: str | None
+    default_embedding_model: str | None
     startup_timeout_seconds: int
     models: list[RuntimeModelConfig]
     local_openai: LocalOpenAIProviderConfig

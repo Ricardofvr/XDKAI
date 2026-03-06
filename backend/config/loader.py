@@ -22,7 +22,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "portable-ai-drive-pro.json"
 ALLOWED_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
 ALLOWED_RUNTIME_PROVIDERS = {"placeholder", "local_openai"}
-ALLOWED_MODEL_ROLES = {"general", "coder"}
+ALLOWED_MODEL_ROLES = {"general", "coder", "embedding"}
+GENERATION_MODEL_ROLES = {"general", "coder"}
+EMBEDDING_MODEL_ROLE = "embedding"
 
 
 class ConfigError(RuntimeError):
@@ -145,11 +147,13 @@ def _parse_local_openai_config(runtime_section: dict[str, Any], startup_timeout_
     health_path = local_openai_section.get("health_path", "/health")
     models_path = local_openai_section.get("models_path", "/v1/models")
     chat_completions_path = local_openai_section.get("chat_completions_path", "/v1/chat/completions")
+    embeddings_path = local_openai_section.get("embeddings_path", "/v1/embeddings")
 
     for key, value in (
         ("health_path", health_path),
         ("models_path", models_path),
         ("chat_completions_path", chat_completions_path),
+        ("embeddings_path", embeddings_path),
     ):
         if not isinstance(value, str) or not value.startswith("/"):
             raise ConfigError(f"Config value 'runtime.local_openai.{key}' must be an absolute path string.")
@@ -160,6 +164,7 @@ def _parse_local_openai_config(runtime_section: dict[str, Any], startup_timeout_
         health_path=health_path,
         models_path=models_path,
         chat_completions_path=chat_completions_path,
+        embeddings_path=embeddings_path,
     )
 
 
@@ -218,11 +223,28 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
     if default_model is not None and not isinstance(default_model, str):
         raise ConfigError("Config value 'runtime.default_model' must be a string or null.")
 
-    runtime_models = _parse_runtime_models(runtime_section)
-    enabled_model_names = {model.public_name for model in runtime_models if model.enabled}
+    default_embedding_model = runtime_section.get("default_embedding_model")
+    if default_embedding_model is not None and not isinstance(default_embedding_model, str):
+        raise ConfigError("Config value 'runtime.default_embedding_model' must be a string or null.")
 
-    if default_model is not None and default_model not in enabled_model_names:
-        raise ConfigError("Config value 'runtime.default_model' must match an enabled runtime model public_name.")
+    runtime_models = _parse_runtime_models(runtime_section)
+
+    enabled_generation_names = {
+        model.public_name for model in runtime_models if model.enabled and model.role in GENERATION_MODEL_ROLES
+    }
+    enabled_embedding_names = {
+        model.public_name for model in runtime_models if model.enabled and model.role == EMBEDDING_MODEL_ROLE
+    }
+
+    if default_model is not None and default_model not in enabled_generation_names:
+        raise ConfigError(
+            "Config value 'runtime.default_model' must match an enabled runtime model with role general/coder."
+        )
+
+    if default_embedding_model is not None and default_embedding_model not in enabled_embedding_names:
+        raise ConfigError(
+            "Config value 'runtime.default_embedding_model' must match an enabled runtime model with role embedding."
+        )
 
     local_openai = _parse_local_openai_config(runtime_section, startup_timeout_seconds)
 
@@ -247,6 +269,7 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
             fallback_provider=fallback_provider,
             allow_fallback_to_placeholder=allow_fallback_to_placeholder,
             default_model=default_model,
+            default_embedding_model=default_embedding_model,
             startup_timeout_seconds=startup_timeout_seconds,
             models=runtime_models,
             local_openai=local_openai,

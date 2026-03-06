@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.runtime.interfaces import ChatGenerationRequest, ChatMessage
+from backend.runtime.interfaces import ChatGenerationRequest, ChatMessage, EmbeddingGenerationRequest
 
 from .errors import ApiValidationError
 
 _ALLOWED_ROLES = {"system", "user", "assistant", "tool"}
+_ALLOWED_ENCODING_FORMATS = {"float"}
 
 
 def _require_object(value: Any, *, message: str, request_id: str | None) -> dict[str, Any]:
@@ -84,5 +85,57 @@ def parse_chat_completions_request(payload: Any, request_id: str | None = None) 
         temperature=temperature,
         max_tokens=max_tokens,
         stream=stream,
+        request_id=request_id,
+    )
+
+
+def parse_embeddings_request(payload: Any, request_id: str | None = None) -> EmbeddingGenerationRequest:
+    body = _require_object(payload, message="Request body must be a JSON object.", request_id=request_id)
+
+    model = _require_non_empty_str(
+        body.get("model"),
+        message="Field 'model' must be a non-empty string.",
+        request_id=request_id,
+    )
+
+    input_raw = body.get("input")
+    input_texts: list[str]
+    if isinstance(input_raw, str):
+        if not input_raw.strip():
+            raise ApiValidationError("Field 'input' must not be an empty string.", request_id=request_id)
+        input_texts = [input_raw]
+    elif isinstance(input_raw, list):
+        if not input_raw:
+            raise ApiValidationError("Field 'input' must not be an empty array.", request_id=request_id)
+        input_texts = []
+        for index, item in enumerate(input_raw):
+            if not isinstance(item, str) or not item.strip():
+                raise ApiValidationError(
+                    f"Field 'input[{index}]' must be a non-empty string.",
+                    request_id=request_id,
+                )
+            input_texts.append(item)
+    else:
+        raise ApiValidationError("Field 'input' must be a string or array of strings.", request_id=request_id)
+
+    encoding_format = body.get("encoding_format")
+    if encoding_format is not None:
+        if not isinstance(encoding_format, str) or not encoding_format.strip():
+            raise ApiValidationError("Field 'encoding_format' must be a non-empty string.", request_id=request_id)
+        if encoding_format not in _ALLOWED_ENCODING_FORMATS:
+            raise ApiValidationError(
+                f"Field 'encoding_format' must be one of: {', '.join(sorted(_ALLOWED_ENCODING_FORMATS))}.",
+                request_id=request_id,
+            )
+
+    user_value = body.get("user")
+    if user_value is not None and (not isinstance(user_value, str) or not user_value.strip()):
+        raise ApiValidationError("Field 'user' must be a non-empty string when provided.", request_id=request_id)
+
+    return EmbeddingGenerationRequest(
+        model=model,
+        input_texts=input_texts,
+        encoding_format=encoding_format,
+        user=user_value,
         request_id=request_id,
     )

@@ -9,6 +9,8 @@ from .interfaces import (
     ChatGenerationChoice,
     ChatGenerationRequest,
     ChatGenerationResponse,
+    EmbeddingGenerationRequest,
+    EmbeddingGenerationResponse,
     ModelInfo,
     RuntimeBackend,
     RuntimeInvocationError,
@@ -71,6 +73,7 @@ class RuntimeManager:
                 initialized=True,
                 ready=False,
                 generation_ready=False,
+                embedding_ready=False,
                 provider_reachable=False,
                 active_model=None,
                 models_available=[],
@@ -140,6 +143,7 @@ class RuntimeManager:
                 "active_state": active_status.state,
                 "fallback_engaged": self._fallback_engaged,
                 "generation_ready": active_status.generation_ready,
+                "embedding_ready": active_status.embedding_ready,
             },
         )
 
@@ -171,6 +175,9 @@ class RuntimeManager:
         active_status = asdict(status)
 
         model_registry = self.get_model_registry_payload()
+        generation_models = [m for m in model_registry if m.get("role") in {"general", "coder"} and m.get("enabled")]
+        embedding_models = [m for m in model_registry if m.get("role") == "embedding" and m.get("enabled")]
+
         active_status.update(
             {
                 "selected_provider": self._selected_provider,
@@ -182,9 +189,18 @@ class RuntimeManager:
                 "generation": {
                     "generation_ready": status.generation_ready,
                     "provider_reachable": status.provider_reachable,
-                    "model_registry_loaded": len(model_registry) > 0,
-                    "enabled_models_count": len(status.models_available),
+                    "model_registry_loaded": len(generation_models) > 0,
+                    "enabled_models_count": len(generation_models),
+                    "enabled_models": [m["public_name"] for m in generation_models],
                     "active_model": status.active_model,
+                    "mode": status.mode,
+                },
+                "embeddings": {
+                    "embedding_ready": status.embedding_ready,
+                    "provider_reachable": status.provider_reachable,
+                    "model_registry_loaded": len(embedding_models) > 0,
+                    "enabled_models_count": len(embedding_models),
+                    "enabled_models": [m["public_name"] for m in embedding_models],
                     "mode": status.mode,
                 },
             }
@@ -200,6 +216,7 @@ class RuntimeManager:
             "fallback_provider": self._fallback_provider,
             "fallback_engaged": self._fallback_engaged,
             "generation_ready": status.generation_ready,
+            "embedding_ready": status.embedding_ready,
             "provider_reachable": status.provider_reachable,
         }
 
@@ -214,6 +231,12 @@ class RuntimeManager:
             },
         )
         return self._active_backend.list_models()
+
+    def list_generation_models(self) -> list[ModelInfo]:
+        return [model for model in self.list_models() if model.role in {"general", "coder"}]
+
+    def list_embedding_models(self) -> list[ModelInfo]:
+        return [model for model in self.list_models() if model.role == "embedding"]
 
     def get_model_registry_payload(self) -> list[dict[str, Any]]:
         registry = self._active_backend.list_configured_models()
@@ -307,6 +330,90 @@ class RuntimeManager:
                 "request_id": request.request_id,
                 "active_provider": status.provider,
                 "duration_ms": duration_ms,
+            },
+        )
+        return response
+
+    def generate_embeddings(self, request: EmbeddingGenerationRequest) -> EmbeddingGenerationResponse:
+        status = self.get_status()
+        if not status.embedding_ready:
+            raise RuntimeUnavailableError(
+                (
+                    f"Runtime provider '{status.provider}' is not embedding-ready "
+                    f"(state={status.state}, provider_reachable={status.provider_reachable})."
+                )
+            )
+
+        started = time.monotonic()
+        self._logger.info(
+            "runtime_generate_embeddings",
+            extra={
+                "event": "runtime_call",
+                "operation": "generate_embeddings",
+                "model": request.model,
+                "input_count": len(request.input_texts),
+                "request_id": request.request_id,
+                "active_provider": status.provider,
+            },
+        )
+
+        try:
+            response = self._active_backend.generate_embeddings(request)
+        except RuntimeUnavailableError as exc:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            self._logger.warning(
+                "runtime_generate_embeddings_failed",
+                extra={
+                    "event": "runtime_call",
+                    "operation": "generate_embeddings_failed",
+                    "request_id": request.request_id,
+                    "active_provider": status.provider,
+                    "error_type": "runtime_unavailable",
+                    "error": str(exc),
+                    "duration_ms": duration_ms,
+                },
+            )
+            raise
+        except RuntimeInvocationError as exc:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            self._logger.warning(
+                "runtime_generate_embeddings_failed",
+                extra={
+                    "event": "runtime_call",
+                    "operation": "generate_embeddings_failed",
+                    "request_id": request.request_id,
+                    "active_provider": status.provider,
+                    "error_type": "runtime_invocation_error",
+                    "error": str(exc),
+                    "duration_ms": duration_ms,
+                },
+            )
+            raise
+        except Exception as exc:  # noqa: BLE001
+            duration_ms = int((time.monotonic() - started) * 1000)
+            self._logger.exception(
+                "runtime_generate_embeddings_exception",
+                extra={
+                    "event": "runtime_call",
+                    "operation": "generate_embeddings_exception",
+                    "request_id": request.request_id,
+                    "active_provider": status.provider,
+                    "duration_ms": duration_ms,
+                },
+            )
+            raise RuntimeInvocationError(f"Unexpected runtime error: {exc}") from exc
+
+        duration_ms = int((time.monotonic() - started) * 1000)
+        self._logger.info(
+            "runtime_generate_embeddings_complete",
+            extra={
+                "event": "runtime_call",
+                "operation": "generate_embeddings_complete",
+                "model": response.model,
+                "request_id": request.request_id,
+                "active_provider": status.provider,
+                "duration_ms": duration_ms,
+                "embedding_count": len(response.data),
             },
         )
         return response

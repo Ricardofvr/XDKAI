@@ -54,6 +54,7 @@ class RuntimeSelectionTests(unittest.TestCase):
         self.assertEqual(status["active_provider"], "placeholder")
         self.assertTrue(status["ready"])
         self.assertTrue(status["generation"]["generation_ready"])
+        self.assertTrue(status["embeddings"]["embedding_ready"])
 
     def test_degraded_state_without_fallback(self) -> None:
         def mutate(data: dict) -> None:
@@ -79,6 +80,7 @@ class RuntimeSelectionTests(unittest.TestCase):
         self.assertEqual(status["active_provider"], "local_openai")
         self.assertEqual(status["state"], "degraded")
         self.assertFalse(status["generation"]["generation_ready"])
+        self.assertFalse(status["embeddings"]["embedding_ready"])
 
     def test_controller_reports_runtime_unavailable_when_degraded(self) -> None:
         def mutate(data: dict) -> None:

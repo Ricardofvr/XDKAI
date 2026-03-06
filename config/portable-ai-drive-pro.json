@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.5.0-week5",
+    "version": "0.6.0-week6",
     "environment": "development"
   },
   "api": {
@@ -19,6 +19,7 @@
     "fallback_provider": "placeholder",
     "allow_fallback_to_placeholder": true,
     "default_model": "local-general",
+    "default_embedding_model": "local-embedding",
     "startup_timeout_seconds": 5,
     "models": [
       {
@@ -40,6 +41,16 @@
           "description": "Reserved for coding-focused flow",
           "stage": "planned"
         }
+      },
+      {
+        "public_name": "local-embedding",
+        "provider_model_id": "nomic-embed-text",
+        "role": "embedding",
+        "enabled": true,
+        "metadata": {
+          "description": "Embedding model for upcoming RAG indexing",
+          "stage": "week6-embeddings"
+        }
       }
     ],
     "local_openai": {
@@ -47,7 +58,8 @@
       "timeout_seconds": 5,
       "health_path": "/health",
       "models_path": "/v1/models",
-      "chat_completions_path": "/v1/chat/completions"
+      "chat_completions_path": "/v1/chat/completions",
+      "embeddings_path": "/v1/embeddings"
     }
   },
   "operating_mode": {

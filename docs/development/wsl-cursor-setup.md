@@ -8,6 +8,19 @@ Development currently happens locally inside this repository in WSL. External SS
 - Repository opened in Cursor
 - Optional local OpenAI-compatible runtime provider may run on `127.0.0.1`
 
+## Python Environment Setup
+Initialize local virtual environment once:
+
+```bash
+./scripts/setup_venv.sh
+```
+
+Activate manually when needed:
+
+```bash
+source .venv/bin/activate
+```
+
 ## Single Startup Path
 Use one command for local backend startup:
 
@@ -15,14 +28,14 @@ Use one command for local backend startup:
 ./scripts/run_backend.sh
 ```
 
-This runs `python3 -m backend.main --config config/portable-ai-drive-pro.json`.
+This command prefers `.venv/bin/python` automatically and falls back to `python3` if `.venv` is missing.
 
-## Runtime Behavior in Week 5
+## Runtime Behavior in Week 6
 Default config selects `local_openai` runtime with placeholder fallback.
 
-- If local runtime is reachable and generation-capable, provider mode is active for real inference.
+- If local runtime is reachable and capability-ready, provider mode is active.
 - If local runtime is unavailable, placeholder fallback engages automatically.
-- Runtime mode, generation readiness, and fallback details are visible in `GET /system/status`.
+- Generation and embeddings readiness are reported separately in `GET /system/status`.
 
 ## Endpoint Checks
 After startup, validate:
@@ -45,11 +58,23 @@ curl -sS http://127.0.0.1:8080/v1/chat/completions \
   }'
 ```
 
-## Real Inference Validation
-To validate real inference (not placeholder), run a local OpenAI-compatible provider separately and point `runtime.local_openai.base_url` at it. Then confirm in `/system/status` that:
+Create embeddings:
+
+```bash
+curl -sS http://127.0.0.1:8080/v1/embeddings \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "local-embedding",
+    "input": ["alpha", "beta"],
+    "encoding_format": "float"
+  }'
+```
+
+## Real Provider Validation
+To validate real provider behavior (not placeholder), run a local OpenAI-compatible provider and point `runtime.local_openai.base_url` at it. Confirm in `/system/status`:
 - `runtime.active_provider == "local_openai"`
-- `runtime.generation.generation_ready == true`
-- chat outputs are model-generated provider responses
+- `runtime.generation.generation_ready == true` for chat
+- `runtime.embeddings.embedding_ready == true` for embeddings
 
 ## Local-First Workflow
 1. Develop and test all modules locally in repo paths.

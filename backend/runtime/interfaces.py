@@ -20,6 +20,7 @@ class RuntimeStatus:
     initialized: bool
     ready: bool
     generation_ready: bool
+    embedding_ready: bool
     provider_reachable: bool
     active_model: str | None
     models_available: list[str]
@@ -68,6 +69,28 @@ class ChatGenerationResponse:
     usage: dict[str, int] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class EmbeddingGenerationRequest:
+    model: str
+    input_texts: list[str]
+    encoding_format: str | None = None
+    user: str | None = None
+    request_id: str | None = None
+
+
+@dataclass(frozen=True)
+class EmbeddingVector:
+    index: int
+    embedding: list[float]
+
+
+@dataclass(frozen=True)
+class EmbeddingGenerationResponse:
+    model: str
+    data: list[EmbeddingVector]
+    usage: dict[str, int] = field(default_factory=dict)
+
+
 class RuntimeBackend(Protocol):
     def startup(self) -> None:
         """Initialize runtime backend resources."""
@@ -93,5 +116,5 @@ class RuntimeBackend(Protocol):
     def stream_chat(self, request: ChatGenerationRequest) -> Iterator[ChatGenerationChoice]:
         """Yield chat tokens/chunks for future streaming support."""
 
-    def generate_embeddings(self, inputs: list[str], **kwargs: Any) -> list[list[float]]:
-        """Generate embeddings (not implemented in Week 5)."""
+    def generate_embeddings(self, request: EmbeddingGenerationRequest) -> EmbeddingGenerationResponse:
+        """Generate embedding vectors for one or more input strings."""

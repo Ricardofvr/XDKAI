@@ -31,15 +31,15 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 5)
+## Implemented Shape (Week 6)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
 - `backend/config/`: typed config schema + file loader
 - `backend/logging_system/`: structured JSON logging initialization
 - `backend/runtime/`: runtime interfaces, provider adapters, provider selection factory, runtime manager
-- `backend/controller/`: orchestration boundary for introspection, models, and chat completion
-- `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility skeleton
+- `backend/controller/`: orchestration boundary for introspection, chat completions, and embeddings
+- `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility endpoints
 
 ## Startup Sequence
 1. Load config from `config/portable-ai-drive-pro.json`.
@@ -55,7 +55,7 @@ Current implementation is in `backend/`:
 Runtime provider is selected through `runtime.provider` in config.
 
 Current options:
-- `local_openai`: local OpenAI-compatible provider adapter with real generation path
+- `local_openai`: local OpenAI-compatible provider adapter with generation + embeddings path
 - `placeholder`: deterministic fallback runtime
 
 Optional fallback behavior:
@@ -68,27 +68,40 @@ If the selected provider is unavailable at startup, runtime manager can engage f
 Runtime config defines a structured model registry under `runtime.models` with fields:
 - `public_name`: client-visible model id
 - `provider_model_id`: provider-specific identifier/path
-- `role`: model intent (`general` or `coder`)
+- `role`: model intent (`general`, `coder`, `embedding`)
 - `enabled`: availability toggle
 - `metadata`: future extension area
 
 Model resolution rules:
 - API/controller only use public model names.
 - Runtime adapter maps public model names to provider model IDs.
-- Disabled or unmapped models are rejected with structured errors.
+- Disabled or role-mismatched models are rejected with structured errors.
+- Chat path uses generation roles (`general`/`coder`); embeddings path uses `embedding` role.
 
-`GET /v1/models` is served from runtime-backed registry data, not hardcoded lists.
+`GET /v1/models` is served from runtime-backed model data, not hardcoded lists.
 
-## Chat Generation Path (Week 5)
+## OpenAI-Compatible Endpoints
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- `POST /v1/embeddings`
+
+### Chat Flow
 1. Client sends OpenAI-style payload to `/v1/chat/completions`.
-2. API validates fields (`model`, `messages`, `temperature`, `max_tokens`, `stream`) and forwards typed request.
-3. Controller validates model availability against runtime-exposed models.
-4. Runtime manager enforces generation readiness and logs invocation lifecycle.
-5. Runtime adapter maps public model -> provider model ID.
-6. Runtime adapter calls provider `/v1/chat/completions` endpoint.
-7. Adapter normalizes provider response to internal runtime contract.
-8. Controller assembles OpenAI-compatible response shape.
-9. API returns JSON response with request ID.
+2. API validates payload and forwards typed request.
+3. Controller validates chat model availability.
+4. Runtime manager enforces generation readiness.
+5. Runtime adapter maps and invokes provider chat endpoint.
+6. Adapter normalizes response to internal contract.
+7. Controller assembles OpenAI-compatible chat response.
+
+### Embeddings Flow
+1. Client sends OpenAI-style payload to `/v1/embeddings`.
+2. API validates payload (`model`, `input`, `encoding_format`).
+3. Controller validates embedding model availability.
+4. Runtime manager enforces embedding readiness.
+5. Runtime adapter maps and invokes provider embeddings endpoint.
+6. Adapter normalizes embedding vectors to internal contract.
+7. Controller assembles OpenAI-compatible embeddings response.
 
 ## Failure and Timeout Handling
 Runtime adapter and runtime manager handle:
@@ -97,23 +110,23 @@ Runtime adapter and runtime manager handle:
 - malformed provider responses
 - provider HTTP error payloads
 - unavailable or disabled model mapping
+- unsupported capability conditions
 
 Failures are logged with structured diagnostics and returned as structured API errors.
 
 ## Runtime Readiness Semantics
-`GET /system/status` now reports readiness beyond startup:
+`GET /system/status` reports capability-separated readiness:
 - selected/active/fallback provider
-- generation readiness
+- generation readiness + enabled generation models
+- embeddings readiness + enabled embedding models
 - provider reachability
-- enabled model count and active model
 - primary provider status snapshot
 - model registry details
-- provider diagnostics (startup error, last chat error, latency)
+- provider diagnostics (startup error, last chat/embeddings errors, latency)
 
 ## Streaming Readiness
-- Request schema already supports `stream` field.
-- Runtime interface includes a `stream_chat` contract for future token/chunk iteration.
-- `stream=true` is currently rejected as unsupported until streaming implementation is added.
+- Chat request schema supports `stream` field but streaming is not implemented yet.
+- Runtime interface includes `stream_chat` for future extension.
 
 ## Planned Request Flow (Later)
 1. Client sends request to OpenAI-compatible API.
