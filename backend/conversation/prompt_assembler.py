@@ -7,6 +7,8 @@ from backend.runtime.interfaces import ChatMessage
 
 @dataclass(frozen=True)
 class PromptAssemblyDiagnostics:
+    system_prompt_included: bool
+    latest_user_included: bool
     history_total_messages: int
     history_included_messages: int
     history_included_turns: int
@@ -14,7 +16,9 @@ class PromptAssemblyDiagnostics:
     history_truncated_by_turns: bool
     history_truncated_by_characters: bool
     rag_context_included: bool
+    rag_context_characters: int
     final_message_count: int
+    total_prompt_characters: int
 
 
 @dataclass(frozen=True)
@@ -45,9 +49,11 @@ def assemble_prompt_messages(
     )
 
     assembled: list[ChatMessage] = []
+    system_prompt_included = bool(config.retain_system_prompt and config.system_prompt_text.strip())
     if config.retain_system_prompt and config.system_prompt_text.strip():
         assembled.append(ChatMessage(role="system", content=config.system_prompt_text.strip()))
 
+    rag_context_characters = len(rag_context_text) if rag_context_text else 0
     if rag_context_text:
         assembled.append(ChatMessage(role="system", content=rag_context_text))
 
@@ -55,6 +61,8 @@ def assemble_prompt_messages(
     assembled.append(latest_user_message)
 
     diagnostics = PromptAssemblyDiagnostics(
+        system_prompt_included=system_prompt_included,
+        latest_user_included=True,
         history_total_messages=len(session_history),
         history_included_messages=len(history_messages),
         history_included_turns=turns_count,
@@ -62,7 +70,9 @@ def assemble_prompt_messages(
         history_truncated_by_turns=truncated_turns,
         history_truncated_by_characters=truncated_chars,
         rag_context_included=bool(rag_context_text),
+        rag_context_characters=rag_context_characters,
         final_message_count=len(assembled),
+        total_prompt_characters=sum(len(message.content) for message in assembled),
     )
     return PromptAssemblyResult(messages=assembled, diagnostics=diagnostics)
 

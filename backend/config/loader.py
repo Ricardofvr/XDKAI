@@ -9,8 +9,10 @@ from .schema import (
     AppConfig,
     AppIdentityConfig,
     ChatConfig,
+    ChatGroundingConfig,
     ChatHistoryConfig,
     ChatSessionConfig,
+    ChatSummarisationConfig,
     ChatSystemPromptConfig,
     FeatureFlagsConfig,
     LocalOpenAIProviderConfig,
@@ -325,6 +327,34 @@ def _parse_chat_config(data: dict[str, Any]) -> ChatConfig:
     if not isinstance(system_prompt_text, str):
         raise ConfigError("Config value 'chat.system_prompt.text' must be a string.")
 
+    grounding_section = chat_section_raw.get("grounding", {})
+    if not isinstance(grounding_section, dict):
+        raise ConfigError("Config value 'chat.grounding' must be an object when provided.")
+
+    include_summary = grounding_section.get("include_summary", True)
+    if not isinstance(include_summary, bool):
+        raise ConfigError("Config value 'chat.grounding.include_summary' must be a boolean.")
+
+    include_debug_details = grounding_section.get("include_debug_details", False)
+    if not isinstance(include_debug_details, bool):
+        raise ConfigError("Config value 'chat.grounding.include_debug_details' must be a boolean.")
+
+    summarisation_section = chat_section_raw.get("summarisation", {})
+    if not isinstance(summarisation_section, dict):
+        raise ConfigError("Config value 'chat.summarisation' must be an object when provided.")
+
+    summarisation_enabled = summarisation_section.get("enabled", True)
+    if not isinstance(summarisation_enabled, bool):
+        raise ConfigError("Config value 'chat.summarisation.enabled' must be a boolean.")
+
+    trigger_turn_count = summarisation_section.get("trigger_turn_count", 16)
+    if not isinstance(trigger_turn_count, int) or trigger_turn_count <= 0:
+        raise ConfigError("Config value 'chat.summarisation.trigger_turn_count' must be a positive integer.")
+
+    trigger_character_count = summarisation_section.get("trigger_character_count", 12000)
+    if not isinstance(trigger_character_count, int) or trigger_character_count <= 0:
+        raise ConfigError("Config value 'chat.summarisation.trigger_character_count' must be a positive integer.")
+
     return ChatConfig(
         include_session_metadata=include_session_metadata,
         debug_session=debug_session,
@@ -338,6 +368,15 @@ def _parse_chat_config(data: dict[str, Any]) -> ChatConfig:
             retain_system_prompt=retain_system_prompt,
         ),
         system_prompt=ChatSystemPromptConfig(text=system_prompt_text.strip()),
+        grounding=ChatGroundingConfig(
+            include_summary=include_summary,
+            include_debug_details=include_debug_details,
+        ),
+        summarisation=ChatSummarisationConfig(
+            enabled=summarisation_enabled,
+            trigger_turn_count=trigger_turn_count,
+            trigger_character_count=trigger_character_count,
+        ),
     )
 
 

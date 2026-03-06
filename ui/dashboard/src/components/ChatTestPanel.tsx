@@ -13,6 +13,9 @@ type ChatEntry = {
   response?: string;
   error?: string;
   sessionId?: string;
+  grounding?: Record<string, unknown>;
+  sessionCompaction?: Record<string, unknown>;
+  groundingDebug?: Record<string, unknown>;
   sessionDebug?: Record<string, unknown>;
   ragDebug?: Record<string, unknown>;
 };
@@ -55,6 +58,9 @@ export function ChatTestPanel({ models }: Props) {
                 ...item,
                 response: answer,
                 sessionId: responseSessionId ?? item.sessionId,
+                grounding: response.portable_ai?.grounding,
+                sessionCompaction: response.portable_ai?.session_compaction,
+                groundingDebug: response.portable_ai?.grounding_debug,
                 sessionDebug: response.portable_ai?.session_debug,
                 ragDebug: response.rag_debug,
               }
@@ -124,6 +130,9 @@ export function ChatTestPanel({ models }: Props) {
               </p>
             ) : null}
             {entry.error ? <p className="error-text">{entry.error}</p> : null}
+            {entry.grounding ? <pre>{JSON.stringify(entry.grounding, null, 2)}</pre> : null}
+            {entry.sessionCompaction ? <pre>{JSON.stringify(entry.sessionCompaction, null, 2)}</pre> : null}
+            {entry.groundingDebug ? <pre>{JSON.stringify(entry.groundingDebug, null, 2)}</pre> : null}
             {entry.sessionDebug ? <pre>{JSON.stringify(entry.sessionDebug, null, 2)}</pre> : null}
             {entry.ragDebug ? <pre>{JSON.stringify(entry.ragDebug, null, 2)}</pre> : null}
           </div>

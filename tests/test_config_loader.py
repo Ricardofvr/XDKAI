@@ -19,6 +19,8 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertGreater(config.rag.chat.max_context_chunks, 0)
         self.assertTrue(config.chat.session.directory)
         self.assertGreater(config.chat.history.max_turns, 0)
+        self.assertTrue(config.chat.grounding.include_summary)
+        self.assertTrue(config.chat.summarisation.enabled)
         self.assertGreaterEqual(config.rag.chat.retrieval_fetch_k, config.rag.chat.max_context_chunks)
         self.assertGreater(config.rag.chat.max_context_characters, 0)
         self.assertGreater(config.rag.chat.max_chunks_per_document, 0)
@@ -50,6 +52,8 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertGreaterEqual(config.rag.chat.near_duplicate_threshold, 0.0)
         self.assertIsInstance(config.chat.include_session_metadata, bool)
         self.assertIsInstance(config.chat.debug_session, bool)
+        self.assertGreater(config.chat.summarisation.trigger_turn_count, 0)
+        self.assertGreater(config.chat.summarisation.trigger_character_count, 0)
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 11)
+## Implemented Shape (Week 12)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
@@ -42,6 +42,7 @@ Current implementation is in `backend/`:
 - `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility endpoints
 - `backend/conversation/session_manager.py`: local session identity + short-term turn history store
 - `backend/conversation/prompt_assembler.py`: system prompt + history window + RAG context assembly
+- `backend/conversation/summarisation.py`: session compaction/summarisation recommendation groundwork
 - `backend/rag/chunking/`: deterministic document chunking
 - `backend/rag/vector_store/`: persistent local vector storage + index metadata + similarity search
 - `backend/rag/indexer.py`: indexing pipeline + CLI entrypoint
@@ -97,7 +98,7 @@ Model resolution rules:
 - `POST /internal/rag/search` (internal dashboard retrieval test bridge)
 - `POST /v1/chat/completions` supports optional `session_id` extension for multi-turn continuity.
 
-## Conversation Orchestration (Week 11)
+## Conversation Orchestration (Week 11-12)
 ### Session-Aware Chat Flow
 `Chat Request -> Controller -> SessionManager -> RetrievalService (optional) -> ContextBuilder -> PromptAssembler -> RuntimeManager (generation) -> SessionManager append turn -> Response`
 
@@ -112,6 +113,7 @@ Controller behavior:
    - windowed history (turn + character budgets)
    - latest user message
 6. Run generation runtime and append user/assistant turns back into session storage.
+7. Evaluate session compaction recommendation thresholds and attach diagnostics metadata.
 
 ## Embeddings Flow (Current)
 1. Client sends OpenAI-style payload to `/v1/embeddings`.
@@ -150,7 +152,7 @@ Controller behavior:
   - `similarity_metric`
   - `min_similarity`
 
-## RAG Chat Integration (Week 9-11)
+## RAG Chat Integration (Week 9-12)
 ### Chat + Retrieval Flow
 `Chat Request -> Controller -> SessionManager -> RetrievalService -> RuntimeManager (embeddings) -> VectorStore -> RetrievalPostprocessing -> ContextBuilder -> PromptAssembler -> RuntimeManager (generation) -> Response`
 
@@ -180,13 +182,41 @@ Controller behavior:
 - `rag_debug` now includes raw/filtered/injected counts and quality diagnostics from post-processing.
 - Intended for local development/troubleshooting only.
 
+## Response Grounding (Week 12)
+Week 12 adds additive response metadata under `portable_ai`:
+- `portable_ai.grounding` (when `chat.grounding.include_summary=true`):
+  - `retrieval_used`
+  - `source_count`
+  - `source_files`
+  - `injected_chunk_count`
+  - `context_truncated`
+  - `skipped_reason`
+- `portable_ai.grounding_debug` (when `chat.grounding.include_debug_details=true`):
+  - raw/filtered/injected retrieval counts
+  - source distribution
+  - prompt-level RAG inclusion signals
+
+## Summarisation Groundwork (Week 12)
+Week 12 does not replace history with summaries yet.
+It introduces compaction recommendation logic through `backend/conversation/summarisation.py`:
+- evaluates session length (`turn_count`, `character_count`)
+- evaluates history window pressure (`history_truncated_by_*`)
+- marks session as compaction-recommended when configured thresholds are crossed
+- creates future-ready summary candidate shape (`status=pending`)
+
+Config knobs:
+- `chat.summarisation.enabled`
+- `chat.summarisation.trigger_turn_count`
+- `chat.summarisation.trigger_character_count`
+
 ## Current Scope Boundary
-Week 11 adds short-term session memory and prompt orchestration for multi-turn chat.
+Week 12 adds source-grounding metadata and summarisation recommendation groundwork.
 Not implemented yet:
 - reranking/hybrid retrieval
 - chat streaming with RAG metadata chunks
 - learned reranking models
 - long-term memory/persistent user profiling
+- actual summary generation/compaction replacement in session history
 
 ## Dashboard v0.1 (UI Milestone)
 - Local React dashboard under `ui/dashboard`.
@@ -252,6 +282,8 @@ Failures are logged with structured diagnostics and returned as structured API e
   - history limits (`max_turns`, `max_characters`, `retain_system_prompt`)
   - system prompt configured flag
   - session metadata flags (`include_session_metadata`, `debug_session`)
+  - grounding flags (`include_summary`, `include_debug_details`)
+  - summarisation thresholds + `last_compaction_assessment`
   - session store status (`storage_mode`, `directory`, `sessions_in_memory`, `sessions_persisted`)
 
 ## Streaming Readiness

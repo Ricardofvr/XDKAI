@@ -28,6 +28,10 @@ class PromptAssemblerTests(unittest.TestCase):
         self.assertEqual(result.messages[2].content, "old question")
         self.assertEqual(result.messages[3].content, "old answer")
         self.assertEqual(result.messages[-1].content, "new question")
+        self.assertTrue(result.diagnostics.system_prompt_included)
+        self.assertTrue(result.diagnostics.latest_user_included)
+        self.assertTrue(result.diagnostics.rag_context_included)
+        self.assertGreater(result.diagnostics.total_prompt_characters, 0)
 
     def test_history_windowing_by_turns(self) -> None:
         history = [
@@ -55,6 +59,7 @@ class PromptAssemblerTests(unittest.TestCase):
         self.assertIn("u2", included_contents)
         self.assertIn("u3", included_contents)
         self.assertTrue(result.diagnostics.history_truncated_by_turns)
+        self.assertTrue(result.diagnostics.latest_user_included)
 
     def test_history_windowing_by_characters(self) -> None:
         history = [
@@ -74,6 +79,7 @@ class PromptAssemblerTests(unittest.TestCase):
         )
         self.assertTrue(result.diagnostics.history_truncated_by_characters)
         self.assertLessEqual(result.diagnostics.history_included_characters, 80)
+        self.assertLessEqual(result.diagnostics.total_prompt_characters, 200)
 
 
 if __name__ == "__main__":

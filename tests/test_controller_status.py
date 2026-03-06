@@ -48,6 +48,9 @@ class ControllerStatusTests(unittest.TestCase):
         self.assertIn("deduplicate_results", status["rag_chat"])
         self.assertIn("min_similarity", status["rag_chat"])
         self.assertIn("sessions", status["chat_orchestration"])
+        self.assertIn("grounding", status["chat_orchestration"])
+        self.assertIn("summarisation", status["chat_orchestration"])
+        self.assertIn("last_compaction_assessment", status["chat_orchestration"]["summarisation"])
 
     def test_system_status_includes_rag_index_payload(self) -> None:
         config = load_config()

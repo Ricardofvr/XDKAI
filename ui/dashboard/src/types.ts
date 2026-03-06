@@ -54,6 +54,15 @@ export type SystemStatus = {
   offline_mode?: boolean;
   runtime?: RuntimeStatus;
   chat_orchestration?: {
+    summarisation?: {
+      enabled?: boolean;
+      trigger_turn_count?: number;
+      trigger_character_count?: number;
+      last_compaction_assessment?: {
+        recommended?: boolean;
+        reasons?: string[];
+      };
+    };
     sessions?: {
       storage_mode?: string;
       sessions_in_memory?: number;
@@ -94,6 +103,21 @@ export type ChatCompletionResponse = {
   portable_ai?: {
     session_id?: string;
     session_created?: boolean;
+    session_compaction?: {
+      recommended?: boolean;
+      reasons?: string[];
+      total_turns?: number;
+      total_characters?: number;
+    };
+    grounding?: {
+      retrieval_used?: boolean;
+      source_count?: number;
+      source_files?: string[];
+      injected_chunk_count?: number;
+      context_truncated?: boolean;
+      skipped_reason?: string | null;
+    };
+    grounding_debug?: Record<string, unknown>;
     session_debug?: Record<string, unknown>;
   };
   rag_debug?: Record<string, unknown>;

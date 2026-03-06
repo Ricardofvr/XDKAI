@@ -17,6 +17,7 @@ function item(label: string, value: string | number | boolean | null | undefined
 export function SystemOverviewPanel({ status, loading }: Props) {
   const runtime = status?.runtime;
   const sessions = status?.chat_orchestration?.sessions;
+  const summarisation = status?.chat_orchestration?.summarisation;
 
   return (
     <section className="panel panel-wide">
@@ -35,6 +36,8 @@ export function SystemOverviewPanel({ status, loading }: Props) {
         {item("Runtime Mode", runtime?.mode)}
         {item("Session Store", sessions?.storage_mode)}
         {item("Sessions In Memory", sessions?.sessions_in_memory)}
+        {item("Summarisation Enabled", summarisation?.enabled)}
+        {item("Compaction Recommended", summarisation?.last_compaction_assessment?.recommended)}
       </div>
     </section>
   );

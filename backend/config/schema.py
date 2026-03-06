@@ -88,12 +88,27 @@ class ChatSystemPromptConfig:
 
 
 @dataclass(frozen=True)
+class ChatGroundingConfig:
+    include_summary: bool
+    include_debug_details: bool
+
+
+@dataclass(frozen=True)
+class ChatSummarisationConfig:
+    enabled: bool
+    trigger_turn_count: int
+    trigger_character_count: int
+
+
+@dataclass(frozen=True)
 class ChatConfig:
     include_session_metadata: bool
     debug_session: bool
     session: ChatSessionConfig
     history: ChatHistoryConfig
     system_prompt: ChatSystemPromptConfig
+    grounding: ChatGroundingConfig
+    summarisation: ChatSummarisationConfig
 
 
 @dataclass(frozen=True)

@@ -2,8 +2,8 @@
 
 Portable AI Drive PRO is a local, offline-first, privacy-first AI operating environment under development in this repository.
 
-## Current Status (Week 11 + Dashboard v0.1)
-Week 1 through Week 11 foundations are complete:
+## Current Status (Week 12 + Dashboard v0.1)
+Week 1 through Week 12 foundations are complete:
 - Product and architecture definitions with explicit trust boundaries
 - Backend startup lifecycle, typed file-driven config, structured logging
 - Controller-orchestrated OpenAI-compatible API
@@ -39,6 +39,13 @@ Week 1 through Week 11 foundations are complete:
   - controller-owned prompt assembler (`system prompt -> RAG context -> history window -> latest user`)
   - history windowing via `chat.history.max_turns` and `chat.history.max_characters`
   - session-aware debug metadata in chat responses (`portable_ai.session_debug`)
+- Grounding + summarisation groundwork (Week 12):
+  - additive response grounding metadata (`portable_ai.grounding`)
+  - source summary for RAG-backed answers (`retrieval_used`, `source_files`, chunk counts, truncation flags)
+  - controlled grounding debug details (`chat.grounding.include_debug_details`)
+  - session compaction assessment groundwork (`portable_ai.session_compaction`)
+  - config-driven summarisation triggers (`chat.summarisation.trigger_turn_count`, `trigger_character_count`)
+  - chat orchestration status now reports last compaction assessment
 - Dashboard v0.1 (post-Week 9 milestone):
   - local React-based developer control center
   - system overview and diagnostics panels
@@ -116,7 +123,7 @@ JSON output (useful for tooling/tests):
 python -m backend.rag.retrieval search "vector store architecture" --json
 ```
 
-## RAG + Session Chat Test (Week 11)
+## RAG + Session Chat Test (Week 12)
 1. Index content:
 
 ```bash
@@ -141,6 +148,8 @@ Optional debug mode:
 - response will include `rag_debug` metadata with retrieval counts, filtering, budgeting, and source chunks.
 - set `chat.debug_session=true` in config
 - response will include `portable_ai.session_debug` metadata with history/prompt assembly diagnostics.
+- set `chat.grounding.include_debug_details=true` in config
+- response will include `portable_ai.grounding_debug` metadata with source distribution and prompt grounding diagnostics.
 
 ## Week 10 RAG Tuning Knobs
 `config/portable-ai-drive-pro.json` -> `rag.chat`:
@@ -163,6 +172,14 @@ Optional debug mode:
 - `chat.include_session_metadata`
 - `chat.debug_session`
 
+## Week 12 Grounding/Summarisation Controls
+`config/portable-ai-drive-pro.json`:
+- `chat.grounding.include_summary`
+- `chat.grounding.include_debug_details`
+- `chat.summarisation.enabled`
+- `chat.summarisation.trigger_turn_count`
+- `chat.summarisation.trigger_character_count`
+
 ## Dashboard v0.1
 Dashboard v0.1 is an internal testing cockpit for development.
 It is not the final product UI, but it is wired to real backend endpoints.
@@ -173,7 +190,7 @@ Sections:
 - Chat Test (with optional `session_id` continuity)
 - Retrieval Test
 - RAG Index Overview
-- Diagnostics
+- Diagnostics (includes retrieval quality and compaction recommendation signals)
 
 ## Index Artifacts
 Index artifacts are persisted under `data/index/`:

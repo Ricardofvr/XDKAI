@@ -9,6 +9,7 @@ export function DiagnosticsPanel({ status }: Props) {
   const runtime = status?.runtime;
   const ragIndex = status?.rag_index;
   const ragChat = status?.rag_chat;
+  const chatOrchestration = status?.chat_orchestration;
 
   if (!status) {
     diagnostics.push("No backend status available.");
@@ -41,6 +42,10 @@ export function DiagnosticsPanel({ status }: Props) {
     if (Boolean(lastRetrieval["budget_character_limit_applied"])) {
       diagnostics.push("Context character budget was applied on the last retrieval.");
     }
+  }
+  const lastCompaction = chatOrchestration?.summarisation?.last_compaction_assessment;
+  if (lastCompaction?.recommended) {
+    diagnostics.push("Session compaction/summarisation is recommended for the last evaluated session.");
   }
 
   return (

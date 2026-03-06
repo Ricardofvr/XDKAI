@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.11.0-week11",
+    "version": "0.12.0-week12",
     "environment": "development"
   },
   "api": {
@@ -85,6 +85,15 @@
     },
     "system_prompt": {
       "text": "You are Portable AI Drive PRO, a private local assistant. Use retrieved local context when relevant, avoid unsupported claims, and be concise."
+    },
+    "grounding": {
+      "include_summary": true,
+      "include_debug_details": false
+    },
+    "summarisation": {
+      "enabled": true,
+      "trigger_turn_count": 16,
+      "trigger_character_count": 12000
     }
   },
   "rag": {

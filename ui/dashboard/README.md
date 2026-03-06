@@ -33,4 +33,5 @@ From repo root:
 - Frontend uses Vite proxy to backend (`127.0.0.1:8080`) for local development.
 - Retrieval panel is backed by real backend orchestration through `/internal/rag/search`.
 - Chat panel supports optional `session_id` reuse for Week 11 multi-turn testing.
+- Chat panel surfaces Week 12 grounding summary and compaction recommendation metadata when available.
 - Dashboard is intentionally minimal and modular for future expansion.

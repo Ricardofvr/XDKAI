@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections import Counter
 from dataclasses import asdict
 from datetime import datetime, timezone
 from threading import Lock
@@ -11,6 +12,8 @@ from typing import Any
 from backend.conversation import (
     ConversationSessionManager,
     PromptAssemblerConfig,
+    SessionCompactionConfig,
+    assess_session_compaction,
     assemble_prompt_messages,
 )
 from backend.config.schema import AppConfig
@@ -64,6 +67,13 @@ class ControllerService:
             history_max_turns=self._config.chat.history.max_turns,
             history_max_characters=self._config.chat.history.max_characters,
         )
+        self._session_compaction_config = SessionCompactionConfig(
+            enabled=self._config.chat.summarisation.enabled,
+            trigger_turn_count=self._config.chat.summarisation.trigger_turn_count,
+            trigger_character_count=self._config.chat.summarisation.trigger_character_count,
+        )
+        self._session_diagnostics_lock = Lock()
+        self._last_session_compaction: dict[str, Any] | None = None
 
         # Week 2 placeholders for future orchestrated subsystems.
         self._policy_manager = None
@@ -101,6 +111,10 @@ class ControllerService:
         runtime_status = self._runtime_manager.get_status_payload()
         rag_index_status = self._get_rag_index_status(runtime_status=runtime_status)
         rag_chat_status = self._get_rag_chat_status(rag_index_status=rag_index_status)
+        with self._session_diagnostics_lock:
+            last_session_compaction = (
+                dict(self._last_session_compaction) if self._last_session_compaction else None
+            )
         return {
             "startup_state": self._startup_state,
             "environment": self._config.app.environment,
@@ -117,6 +131,16 @@ class ControllerService:
                 "system_prompt_configured": bool(self._config.chat.system_prompt.text.strip()),
                 "include_session_metadata": self._config.chat.include_session_metadata,
                 "debug_session": self._config.chat.debug_session,
+                "grounding": {
+                    "include_summary": self._config.chat.grounding.include_summary,
+                    "include_debug_details": self._config.chat.grounding.include_debug_details,
+                },
+                "summarisation": {
+                    "enabled": self._config.chat.summarisation.enabled,
+                    "trigger_turn_count": self._config.chat.summarisation.trigger_turn_count,
+                    "trigger_character_count": self._config.chat.summarisation.trigger_character_count,
+                    "last_compaction_assessment": last_session_compaction,
+                },
                 "sessions": self._session_manager.get_status_payload(),
             },
             "rag_index": rag_index_status,
@@ -333,6 +357,9 @@ class ControllerService:
             "retrieval_result_count_injected": 0,
             "postprocess": None,
             "chunks": [],
+            "source_distribution": {},
+            "source_files": [],
+            "context_truncated": False,
             "skipped_reason": None,
             "error": None,
         }
@@ -401,6 +428,13 @@ class ControllerService:
                         }
                         for hit in selected_hits
                     ]
+                    source_distribution = dict(Counter(hit.source_file for hit in selected_hits))
+                    rag_debug["source_distribution"] = source_distribution
+                    rag_debug["source_files"] = sorted(source_distribution.keys())
+                    rag_debug["context_truncated"] = bool(
+                        processed.diagnostics.budget_truncated_count > 0
+                        or processed.diagnostics.budget_character_limit_applied
+                    )
                     self._logger.info(
                         "controller_rag_context_prepared",
                         extra={
@@ -418,6 +452,7 @@ class ControllerService:
                             "budget_chunk_limit_applied": processed.diagnostics.budget_chunk_limit_applied,
                             "budget_character_limit_applied": processed.diagnostics.budget_character_limit_applied,
                             "budget_truncated_count": processed.diagnostics.budget_truncated_count,
+                            "source_distribution": source_distribution,
                         },
                     )
                 else:
@@ -471,6 +506,8 @@ class ControllerService:
             rag_context_text=rag_context_text,
             config=self._prompt_assembler_config,
         )
+        rag_debug["prompt_rag_context_included"] = prompt_assembly.diagnostics.rag_context_included
+        rag_debug["prompt_rag_context_characters"] = prompt_assembly.diagnostics.rag_context_characters
         runtime_request = ChatGenerationRequest(
             model=request.model,
             messages=prompt_assembly.messages,
@@ -491,8 +528,12 @@ class ControllerService:
                 "history_included_turns": prompt_assembly.diagnostics.history_included_turns,
                 "history_truncated_by_turns": prompt_assembly.diagnostics.history_truncated_by_turns,
                 "history_truncated_by_characters": prompt_assembly.diagnostics.history_truncated_by_characters,
+                "system_prompt_included": prompt_assembly.diagnostics.system_prompt_included,
+                "latest_user_included": prompt_assembly.diagnostics.latest_user_included,
                 "rag_context_included": prompt_assembly.diagnostics.rag_context_included,
+                "rag_context_characters": prompt_assembly.diagnostics.rag_context_characters,
                 "final_message_count": prompt_assembly.diagnostics.final_message_count,
+                "total_prompt_characters": prompt_assembly.diagnostics.total_prompt_characters,
             },
         )
 
@@ -537,7 +578,7 @@ class ControllerService:
                 }
                 for choice in runtime_response.choices
             ],
-                "usage": runtime_response.usage,
+            "usage": runtime_response.usage,
         }
 
         self._session_manager.append_message(
@@ -552,12 +593,54 @@ class ControllerService:
             content=runtime_response.choices[0].message.content,
             metadata={"request_id": request.request_id, "model": runtime_response.model},
         )
+        session_history_after = self._session_manager.get_history_messages(session_id)
+        compaction_assessment = assess_session_compaction(
+            session_id=session_id,
+            session_messages=session_history_after,
+            prompt_diagnostics=prompt_assembly.diagnostics,
+            config=self._session_compaction_config,
+        )
+        self._record_session_compaction_diagnostics(
+            request_id=request.request_id,
+            session_id=session_id,
+            diagnostics=asdict(compaction_assessment),
+        )
+        self._logger.info(
+            "controller_session_compaction_evaluated",
+            extra={
+                "event": "conversation_compaction",
+                "request_id": request.request_id,
+                "session_id": session_id,
+                "recommended": compaction_assessment.recommended,
+                "reasons": compaction_assessment.reasons,
+                "total_turns": compaction_assessment.total_turns,
+                "total_characters": compaction_assessment.total_characters,
+            },
+        )
+
+        grounding_summary = {
+            "retrieval_used": bool(rag_debug["retrieval_used"]),
+            "source_count": len(rag_debug["source_files"]),
+            "source_files": list(rag_debug["source_files"]),
+            "injected_chunk_count": int(rag_debug["retrieval_result_count_injected"]),
+            "context_truncated": bool(rag_debug["context_truncated"]),
+            "skipped_reason": rag_debug["skipped_reason"],
+        }
 
         if self._config.chat.include_session_metadata:
             response["portable_ai"] = {
                 "session_id": session_id,
                 "session_created": session_created,
+                "session_compaction": {
+                    "recommended": compaction_assessment.recommended,
+                    "reasons": compaction_assessment.reasons,
+                    "total_turns": compaction_assessment.total_turns,
+                    "total_characters": compaction_assessment.total_characters,
+                },
             }
+            if self._config.chat.grounding.include_summary:
+                response["portable_ai"]["grounding"] = grounding_summary
+
             if self._config.chat.debug_session:
                 response["portable_ai"]["session_debug"] = {
                     "seeded_history_count": seeded_history_count,
@@ -567,8 +650,27 @@ class ControllerService:
                     "history_truncated_by_turns": prompt_assembly.diagnostics.history_truncated_by_turns,
                     "history_truncated_by_characters": prompt_assembly.diagnostics.history_truncated_by_characters,
                     "history_included_characters": prompt_assembly.diagnostics.history_included_characters,
+                    "system_prompt_included": prompt_assembly.diagnostics.system_prompt_included,
+                    "latest_user_included": prompt_assembly.diagnostics.latest_user_included,
                     "rag_context_included": prompt_assembly.diagnostics.rag_context_included,
+                    "rag_context_characters": prompt_assembly.diagnostics.rag_context_characters,
                     "final_message_count": prompt_assembly.diagnostics.final_message_count,
+                    "total_prompt_characters": prompt_assembly.diagnostics.total_prompt_characters,
+                    "session_total_messages": compaction_assessment.total_messages,
+                    "session_total_turns": compaction_assessment.total_turns,
+                    "session_total_characters": compaction_assessment.total_characters,
+                    "summarisation_recommended": compaction_assessment.recommended,
+                    "summarisation_reasons": compaction_assessment.reasons,
+                    "history_window_pressure": compaction_assessment.history_window_pressure,
+                }
+
+            if self._config.chat.grounding.include_debug_details:
+                response["portable_ai"]["grounding_debug"] = {
+                    "retrieval_result_count_raw": rag_debug["retrieval_result_count_raw"],
+                    "retrieval_result_count_filtered": rag_debug["retrieval_result_count_filtered"],
+                    "retrieval_result_count_injected": rag_debug["retrieval_result_count_injected"],
+                    "source_distribution": rag_debug["source_distribution"],
+                    "prompt_rag_context_included": prompt_assembly.diagnostics.rag_context_included,
                 }
 
         if self._config.rag.chat.debug_retrieval:
@@ -585,6 +687,9 @@ class ControllerService:
                 "rag_retrieval_used": rag_debug["retrieval_used"],
                 "rag_result_count_raw": rag_debug["retrieval_result_count_raw"],
                 "rag_result_count_injected": rag_debug["retrieval_result_count_injected"],
+                "grounding_source_count": grounding_summary["source_count"],
+                "grounding_context_truncated": grounding_summary["context_truncated"],
+                "session_compaction_recommended": compaction_assessment.recommended,
             },
         )
 
@@ -732,6 +837,21 @@ class ControllerService:
         }
         with self._rag_diagnostics_lock:
             self._last_rag_diagnostics = payload
+
+    def _record_session_compaction_diagnostics(
+        self,
+        request_id: str | None,
+        session_id: str,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        payload = {
+            "captured_at_utc": datetime.now(timezone.utc).isoformat(),
+            "request_id": request_id,
+            "session_id": session_id,
+            **diagnostics,
+        }
+        with self._session_diagnostics_lock:
+            self._last_session_compaction = payload
 
     def _extract_latest_user_message(self, messages: list[ChatMessage]) -> tuple[ChatMessage | None, int | None]:
         for index in range(len(messages) - 1, -1, -1):

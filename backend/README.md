@@ -1,6 +1,6 @@
 # Backend Service
 
-This package contains the Week 11 backend foundation for Portable AI Drive PRO.
+This package contains the Week 12 backend foundation for Portable AI Drive PRO.
 
 ## Responsibilities
 - Startup bootstrap sequencing
@@ -34,10 +34,17 @@ This package contains the Week 11 backend foundation for Portable AI Drive PRO.
 - Conversation/session orchestration:
   - session manager (`backend/conversation/session_manager.py`)
   - prompt assembly module (`backend/conversation/prompt_assembler.py`)
+  - summarisation groundwork module (`backend/conversation/summarisation.py`)
   - session-aware chat flow (`/v1/chat/completions` with optional `session_id`)
   - bounded history windowing (`chat.history.max_turns`, `chat.history.max_characters`)
   - configurable system prompt layer (`chat.system_prompt.text`)
   - session debug metadata (`portable_ai.session_debug`)
+- Week 12 response grounding + compaction diagnostics:
+  - additive grounding summary (`portable_ai.grounding`)
+  - optional grounding debug details (`portable_ai.grounding_debug`)
+  - session compaction recommendation (`portable_ai.session_compaction`)
+  - chat orchestration status includes last compaction assessment (`/system/status`)
+  - no automatic summary replacement yet (groundwork/diagnostics only)
 
 ## Entrypoints
 - Backend API service:

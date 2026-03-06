@@ -173,6 +173,10 @@ class RagChatIntegrationTests(unittest.TestCase):
         self.assertEqual(response["choices"][0]["message"]["content"], "rag-aware-response")
         self.assertIn("portable_ai", response)
         self.assertTrue(response["portable_ai"]["session_id"])
+        self.assertIn("grounding", response["portable_ai"])
+        self.assertTrue(response["portable_ai"]["grounding"]["retrieval_used"])
+        self.assertEqual(response["portable_ai"]["grounding"]["source_count"], 1)
+        self.assertEqual(response["portable_ai"]["grounding"]["injected_chunk_count"], 1)
         self.assertEqual(retrieval_service.calls, ["Explain architecture"])
         self.assertIsNotNone(backend.last_chat_request)
         assert backend.last_chat_request is not None
@@ -204,11 +208,13 @@ class RagChatIntegrationTests(unittest.TestCase):
             request_id="req_rag_2",
         )
 
-        controller.create_chat_completion(request)
+        response = controller.create_chat_completion(request)
 
         self.assertEqual(retrieval_service.calls, [])
         assert backend.last_chat_request is not None
         self.assertEqual(len(backend.last_chat_request.messages), 2)
+        self.assertIn("portable_ai", response)
+        self.assertFalse(response["portable_ai"]["grounding"]["retrieval_used"])
 
     def test_chat_falls_back_when_retrieval_errors(self) -> None:
         config = _load_mutated_config(lambda data: data["rag"]["chat"].update({"enabled": True}))
@@ -270,6 +276,7 @@ class RagChatIntegrationTests(unittest.TestCase):
         self.assertEqual(response["rag_debug"]["retrieval_result_count_raw"], 1)
         self.assertEqual(response["rag_debug"]["retrieval_result_count_injected"], 1)
         self.assertIn("postprocess", response["rag_debug"])
+        self.assertIn("source_distribution", response["rag_debug"])
 
     def test_chat_falls_back_when_retrieval_results_filtered_out(self) -> None:
         def mutate(data):
@@ -313,6 +320,47 @@ class RagChatIntegrationTests(unittest.TestCase):
         self.assertFalse(response["rag_debug"]["retrieval_used"])
         self.assertEqual(response["rag_debug"]["skipped_reason"], "retrieval_results_filtered_empty")
 
+    def test_grounding_summary_can_be_disabled(self) -> None:
+        def mutate(data):
+            data["chat"]["grounding"]["include_summary"] = False
+
+        config = _load_mutated_config(mutate)
+        retrieval_service = _FakeRetrievalService(response=None)
+        controller, _ = self._build_controller(config, retrieval_service)
+
+        response = controller.create_chat_completion(
+            ChatGenerationRequest(
+                model="local-general",
+                messages=[ChatMessage(role="user", content="hello")],
+                stream=False,
+                request_id="req_grounding_disabled",
+            )
+        )
+
+        self.assertIn("portable_ai", response)
+        self.assertNotIn("grounding", response["portable_ai"])
+
+    def test_grounding_debug_details_can_be_enabled(self) -> None:
+        def mutate(data):
+            data["chat"]["grounding"]["include_debug_details"] = True
+            data["rag"]["chat"]["enabled"] = False
+
+        config = _load_mutated_config(mutate)
+        retrieval_service = _FakeRetrievalService(response=None)
+        controller, _ = self._build_controller(config, retrieval_service)
+
+        response = controller.create_chat_completion(
+            ChatGenerationRequest(
+                model="local-general",
+                messages=[ChatMessage(role="user", content="hello")],
+                stream=False,
+                request_id="req_grounding_debug",
+            )
+        )
+
+        self.assertIn("portable_ai", response)
+        self.assertIn("grounding_debug", response["portable_ai"])
+
     def test_chat_reuses_session_history_on_follow_up_turn(self) -> None:
         config = _load_mutated_config(lambda data: data["rag"]["chat"].update({"enabled": False}))
         retrieval_service = _FakeRetrievalService(response=None)
@@ -343,6 +391,30 @@ class RagChatIntegrationTests(unittest.TestCase):
         self.assertIn("First question", contents)
         self.assertIn("rag-aware-response", contents)
         self.assertIn("Follow-up question", contents)
+
+    def test_session_compaction_recommendation_exposed(self) -> None:
+        def mutate(data):
+            data["rag"]["chat"]["enabled"] = False
+            data["chat"]["summarisation"]["enabled"] = True
+            data["chat"]["summarisation"]["trigger_turn_count"] = 1
+            data["chat"]["summarisation"]["trigger_character_count"] = 999999
+
+        config = _load_mutated_config(mutate)
+        retrieval_service = _FakeRetrievalService(response=None)
+        controller, _ = self._build_controller(config, retrieval_service)
+
+        response = controller.create_chat_completion(
+            ChatGenerationRequest(
+                model="local-general",
+                messages=[ChatMessage(role="user", content="hello")],
+                stream=False,
+                request_id="req_compact_1",
+            )
+        )
+
+        self.assertIn("portable_ai", response)
+        self.assertIn("session_compaction", response["portable_ai"])
+        self.assertTrue(response["portable_ai"]["session_compaction"]["recommended"])
 
 
 if __name__ == "__main__":
