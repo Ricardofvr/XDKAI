@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from backend.runtime.interfaces import ChatGenerationRequest, ChatMessage, EmbeddingGenerationRequest
@@ -8,6 +9,14 @@ from .errors import ApiValidationError
 
 _ALLOWED_ROLES = {"system", "user", "assistant", "tool"}
 _ALLOWED_ENCODING_FORMATS = {"float"}
+
+
+@dataclass(frozen=True)
+class RetrievalSearchRequest:
+    query: str
+    top_k: int | None = None
+    embedding_model: str | None = None
+    min_similarity: float | None = None
 
 
 def _require_object(value: Any, *, message: str, request_id: str | None) -> dict[str, Any]:
@@ -138,4 +147,46 @@ def parse_embeddings_request(payload: Any, request_id: str | None = None) -> Emb
         encoding_format=encoding_format,
         user=user_value,
         request_id=request_id,
+    )
+
+
+def parse_retrieval_search_request(payload: Any, request_id: str | None = None) -> RetrievalSearchRequest:
+    body = _require_object(payload, message="Request body must be a JSON object.", request_id=request_id)
+
+    query = _require_non_empty_str(
+        body.get("query"),
+        message="Field 'query' must be a non-empty string.",
+        request_id=request_id,
+    )
+
+    top_k_raw = body.get("top_k")
+    top_k: int | None = None
+    if top_k_raw is not None:
+        if not isinstance(top_k_raw, int) or top_k_raw <= 0:
+            raise ApiValidationError("Field 'top_k' must be a positive integer.", request_id=request_id)
+        top_k = top_k_raw
+
+    embedding_model_raw = body.get("embedding_model")
+    embedding_model: str | None = None
+    if embedding_model_raw is not None:
+        embedding_model = _require_non_empty_str(
+            embedding_model_raw,
+            message="Field 'embedding_model' must be a non-empty string when provided.",
+            request_id=request_id,
+        )
+
+    min_similarity_raw = body.get("min_similarity")
+    min_similarity: float | None = None
+    if min_similarity_raw is not None:
+        if not isinstance(min_similarity_raw, (int, float)):
+            raise ApiValidationError("Field 'min_similarity' must be a number when provided.", request_id=request_id)
+        min_similarity = float(min_similarity_raw)
+        if min_similarity < -1.0 or min_similarity > 1.0:
+            raise ApiValidationError("Field 'min_similarity' must be between -1.0 and 1.0.", request_id=request_id)
+
+    return RetrievalSearchRequest(
+        query=query,
+        top_k=top_k,
+        embedding_model=embedding_model,
+        min_similarity=min_similarity,
     )

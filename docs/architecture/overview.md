@@ -90,6 +90,7 @@ Model resolution rules:
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 - `POST /v1/embeddings`
+- `POST /internal/rag/search` (internal dashboard retrieval test bridge)
 
 ## Embeddings Flow (Current)
 1. Client sends OpenAI-style payload to `/v1/embeddings`.
@@ -157,6 +158,15 @@ Not implemented yet:
 - reranking/hybrid retrieval
 - chat streaming with RAG metadata chunks
 - advanced context-window packing/deduplication
+
+## Dashboard v0.1 (UI Milestone)
+- Local React dashboard under `ui/dashboard`.
+- Purpose: internal developer/testing cockpit, not final user-facing product UI.
+- Uses live backend endpoints:
+  - `/system/status`
+  - `/v1/models`
+  - `/v1/chat/completions`
+  - `/internal/rag/search`
 
 ## Index Storage Layout
 Default location: `data/index/`

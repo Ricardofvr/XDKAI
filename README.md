@@ -2,7 +2,7 @@
 
 Portable AI Drive PRO is a local, offline-first, privacy-first AI operating environment under development in this repository.
 
-## Current Status (Week 9)
+## Current Status (Week 9 + Dashboard v0.1)
 Week 1 through Week 9 foundations are complete:
 - Product and architecture definitions with explicit trust boundaries
 - Backend startup lifecycle, typed file-driven config, structured logging
@@ -27,6 +27,13 @@ Week 1 through Week 9 foundations are complete:
   - fallback to normal chat when retrieval is unavailable/fails
   - optional retrieval debug metadata in chat response (`rag.chat.debug_retrieval=true`)
   - RAG chat status in `GET /system/status` under `rag_chat`
+- Dashboard v0.1 (post-Week 9 milestone):
+  - local React-based developer control center
+  - system overview and diagnostics panels
+  - models panel (`/v1/models`)
+  - chat test panel (`/v1/chat/completions`)
+  - retrieval test panel (`/internal/rag/search`)
+  - RAG index visibility panel (`/system/status`)
 - Standard local Python virtual environment workflow (`.venv`) via `scripts/setup_venv.sh`
 
 ## Core Principles
@@ -59,6 +66,15 @@ Run the backend service:
 ./scripts/run_backend.sh
 ```
 
+Run the dashboard (new terminal):
+
+```bash
+./scripts/run_dashboard.sh
+```
+
+Dashboard URL:
+- `http://127.0.0.1:5173`
+
 Then check:
 - `GET http://127.0.0.1:8080/health`
 - `GET http://127.0.0.1:8080/version`
@@ -66,6 +82,7 @@ Then check:
 - `GET http://127.0.0.1:8080/v1/models`
 - `POST http://127.0.0.1:8080/v1/chat/completions`
 - `POST http://127.0.0.1:8080/v1/embeddings`
+- `POST http://127.0.0.1:8080/internal/rag/search`
 
 ## Indexing CLI (Week 7)
 Index a local text document:
@@ -109,6 +126,18 @@ curl -sS http://127.0.0.1:8080/v1/chat/completions \
 Optional debug mode:
 - set `rag.chat.debug_retrieval=true` in config
 - response will include `rag_debug` metadata for retrieval usage/chunks.
+
+## Dashboard v0.1
+Dashboard v0.1 is an internal testing cockpit for development.
+It is not the final product UI, but it is wired to real backend endpoints.
+
+Sections:
+- System Overview
+- Models
+- Chat Test
+- Retrieval Test
+- RAG Index Overview
+- Diagnostics
 
 ## Index Artifacts
 Index artifacts are persisted under `data/index/`:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -476,6 +477,72 @@ class ControllerService:
         )
 
         return response
+
+    def search_retrieval(
+        self,
+        query: str,
+        top_k: int | None = None,
+        embedding_model: str | None = None,
+        min_similarity: float | None = None,
+    ) -> dict[str, Any]:
+        self._logger.info(
+            "controller_retrieval_search_received",
+            extra={
+                "event": "controller_route",
+                "route": "internal_rag_search",
+                "query_length": len(query) if isinstance(query, str) else None,
+                "top_k": top_k,
+            },
+        )
+
+        if not self._config.rag.enabled:
+            raise ControllerRequestError(
+                "RAG is disabled in configuration.",
+                error_type="rag_disabled",
+                status_code=503,
+            )
+        if self._rag_retrieval_service is None:
+            raise ControllerRequestError(
+                "Retrieval service is not available.",
+                error_type="retrieval_unavailable",
+                status_code=503,
+            )
+
+        try:
+            response = self._rag_retrieval_service.search(
+                query=query,
+                top_k=top_k,
+                embedding_model=embedding_model,
+                min_similarity=min_similarity,
+            )
+        except ControllerRequestError:
+            raise
+        except ValueError as exc:
+            raise ControllerRequestError(
+                str(exc),
+                error_type="invalid_request",
+                status_code=400,
+            ) from exc
+        except RuntimeUnavailableError as exc:
+            raise ControllerRequestError(
+                str(exc),
+                error_type="runtime_unavailable",
+                status_code=503,
+            ) from exc
+        except RuntimeInvocationError as exc:
+            raise ControllerRequestError(
+                str(exc),
+                error_type="runtime_invocation_error",
+                status_code=502,
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ControllerRequestError(
+                f"Retrieval failed: {exc}",
+                error_type="retrieval_failed",
+                status_code=502,
+            ) from exc
+
+        return asdict(response)
 
     def _extract_latest_user_message(self, messages: list[ChatMessage]) -> ChatMessage | None:
         for message in reversed(messages):

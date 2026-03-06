@@ -13,6 +13,7 @@ This package contains the Week 9 backend foundation for Portable AI Drive PRO.
 - Controller initialization
 - Introspection API exposure
 - OpenAI-compatible namespace (`/v1/models`, `/v1/chat/completions`, `/v1/embeddings`)
+- Internal dashboard test endpoint (`/internal/rag/search`)
 - RAG indexing foundation:
   - deterministic chunking (`backend/rag/chunking`)
   - persistent vector store (`backend/rag/vector_store`)
@@ -34,3 +35,5 @@ This package contains the Week 9 backend foundation for Portable AI Drive PRO.
   - `python -m backend.rag.indexer index ./docs/sample.txt`
 - Retrieval CLI:
   - `python -m backend.rag.retrieval search "system architecture"`
+- Dashboard retrieval endpoint example:
+  - `curl -sS http://127.0.0.1:8080/internal/rag/search -H 'content-type: application/json' -d '{"query":"system architecture"}'`

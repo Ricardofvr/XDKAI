@@ -1,7 +1,11 @@
 import unittest
 
 from backend.api.errors import ApiValidationError
-from backend.api.openai_schema import parse_chat_completions_request, parse_embeddings_request
+from backend.api.openai_schema import (
+    parse_chat_completions_request,
+    parse_embeddings_request,
+    parse_retrieval_search_request,
+)
 
 
 class OpenAISchemaTests(unittest.TestCase):
@@ -71,6 +75,23 @@ class OpenAISchemaTests(unittest.TestCase):
 
         with self.assertRaises(ApiValidationError):
             parse_embeddings_request(payload, request_id="req_embed")
+
+    def test_parse_retrieval_search_request_valid(self) -> None:
+        payload = {
+            "query": "architecture",
+            "top_k": 5,
+            "embedding_model": "local-embedding",
+            "min_similarity": -0.5,
+        }
+        request = parse_retrieval_search_request(payload, request_id="req_ret")
+        self.assertEqual(request.query, "architecture")
+        self.assertEqual(request.top_k, 5)
+        self.assertEqual(request.embedding_model, "local-embedding")
+        self.assertEqual(request.min_similarity, -0.5)
+
+    def test_parse_retrieval_search_request_invalid_query(self) -> None:
+        with self.assertRaises(ApiValidationError):
+            parse_retrieval_search_request({"query": ""}, request_id="req_ret")
 
 
 if __name__ == "__main__":
