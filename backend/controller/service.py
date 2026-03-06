@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.config.schema import AppConfig
-from backend.runtime.interfaces import ChatGenerationRequest
+from backend.runtime.interfaces import ChatGenerationRequest, RuntimeInvocationError, RuntimeUnavailableError
 from backend.runtime.manager import RuntimeManager
 
 from .errors import ControllerRequestError
@@ -36,7 +36,7 @@ class ControllerService:
 
     def get_health(self) -> dict[str, Any]:
         runtime_status = self._runtime_manager.get_status_payload()
-        runtime_ready = runtime_status.get("state") == "ready"
+        runtime_ready = bool(runtime_status.get("ready"))
         status = "ok" if runtime_ready else "degraded"
 
         return {
@@ -58,12 +58,14 @@ class ControllerService:
         }
 
     def get_system_status(self) -> dict[str, Any]:
+        runtime_status = self._runtime_manager.get_status_payload()
         return {
             "startup_state": self._startup_state,
             "environment": self._config.app.environment,
             "offline_mode": self._config.operating_mode.offline_default,
-            "runtime": self._runtime_manager.get_status_payload(),
+            "runtime": runtime_status,
             "runtime_metadata": self._runtime_manager.get_metadata(),
+            "model_registry": self._runtime_manager.get_model_registry_payload(),
             "feature_flags": {
                 "openai_compatible_api": self._config.feature_flags.openai_compatible_api,
                 "tool_execution": self._config.feature_flags.tool_execution,
@@ -121,7 +123,21 @@ class ControllerService:
                 status_code=404,
             )
 
-        runtime_response = self._runtime_manager.generate_chat(request)
+        try:
+            runtime_response = self._runtime_manager.generate_chat(request)
+        except RuntimeUnavailableError as exc:
+            raise ControllerRequestError(
+                str(exc),
+                error_type="runtime_unavailable",
+                status_code=503,
+            ) from exc
+        except RuntimeInvocationError as exc:
+            raise ControllerRequestError(
+                str(exc),
+                error_type="runtime_invocation_error",
+                status_code=502,
+            ) from exc
+
         if not runtime_response.choices:
             raise ControllerRequestError(
                 "Runtime returned no choices.",

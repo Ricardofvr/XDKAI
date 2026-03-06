@@ -2,16 +2,16 @@
 
 Portable AI Drive PRO is a local, offline-first, privacy-first AI operating environment under development in this repository.
 
-## Current Status (Week 3)
-Week 1 through Week 3 foundations are complete:
+## Current Status (Week 4)
+Week 1 through Week 4 foundations are complete:
 - Product and architecture definitions
 - Explicit trust boundaries and security model
 - Backend service skeleton with startup lifecycle
-- File-driven typed configuration
-- Structured JSON logging
-- Controller and runtime abstractions
-- Introspection API endpoints (`/health`, `/version`, `/system/status`)
-- OpenAI-compatible namespace skeleton (`/v1/chat/completions`, `/v1/models`)
+- File-driven typed configuration and structured model registry
+- Structured JSON logging and request tracing
+- Controller-orchestrated OpenAI-compatible API path
+- Runtime provider selection (`local_openai` + `placeholder` fallback)
+- Runtime lifecycle visibility (ready/degraded/fallback) in `/system/status`
 
 ## Core Principles
 - Offline-first by default
@@ -43,6 +43,18 @@ Then check:
 - `GET http://127.0.0.1:8080/system/status`
 - `GET http://127.0.0.1:8080/v1/models`
 - `POST http://127.0.0.1:8080/v1/chat/completions`
+
+Example chat request:
+
+```bash
+curl -sS http://127.0.0.1:8080/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "local-general",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'
+```
 
 ## Documentation Index
 Start with [docs/README.md](docs/README.md).

@@ -4,10 +4,21 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol
 
 
+class RuntimeUnavailableError(RuntimeError):
+    """Raised when runtime is not ready or temporarily unavailable."""
+
+
+class RuntimeInvocationError(RuntimeError):
+    """Raised when runtime call fails due to provider or payload issues."""
+
+
 @dataclass
 class RuntimeStatus:
     state: str
     provider: str
+    mode: str
+    initialized: bool
+    ready: bool
     active_model: str | None
     models_available: list[str]
     details: dict[str, Any] = field(default_factory=dict)
@@ -19,6 +30,10 @@ class ModelInfo:
     object: str = "model"
     created: int = 0
     owned_by: str = "portable-ai-drive"
+    role: str = "general"
+    enabled: bool = True
+    provider_model_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -62,7 +77,10 @@ class RuntimeBackend(Protocol):
         """Return current backend status."""
 
     def list_models(self) -> list[ModelInfo]:
-        """Return currently known model descriptors."""
+        """Return currently available model descriptors for API usage."""
+
+    def list_configured_models(self) -> list[ModelInfo]:
+        """Return configured model registry entries, including disabled entries."""
 
     def get_metadata(self) -> dict[str, Any]:
         """Return runtime backend metadata."""
@@ -74,4 +92,4 @@ class RuntimeBackend(Protocol):
         """Yield chat tokens/chunks for future streaming support."""
 
     def generate_embeddings(self, inputs: list[str], **kwargs: Any) -> list[list[float]]:
-        """Generate embeddings (not implemented in Week 3)."""
+        """Generate embeddings (not implemented in Week 4)."""

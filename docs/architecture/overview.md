@@ -31,30 +31,55 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 3)
+## Implemented Shape (Week 4)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
 - `backend/config/`: typed config schema + file loader
 - `backend/logging_system/`: structured JSON logging initialization
-- `backend/runtime/`: runtime interface, placeholder backend, runtime manager
-- `backend/controller/`: orchestration boundary for health, models, and chat completion flow
+- `backend/runtime/`: runtime interfaces, provider adapters, provider selection factory, runtime manager
+- `backend/controller/`: orchestration boundary for introspection, models, and chat completion
 - `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility skeleton
 
 ## Startup Sequence
 1. Load config from `config/portable-ai-drive-pro.json`.
 2. Initialize structured logging (file + stdout per config).
-3. Initialize runtime manager with provider-agnostic placeholder runtime.
-4. Initialize controller with config + runtime manager.
-5. Initialize API server and route bindings.
-6. Start serving local requests.
+3. Build selected runtime provider backend from config.
+4. Start runtime manager lifecycle.
+5. If selected provider is unavailable, optionally engage placeholder fallback.
+6. Initialize controller with runtime manager.
+7. Initialize API server and route bindings.
+8. Start serving local requests.
+
+## Runtime Provider Selection
+Runtime provider is selected through `runtime.provider` in config.
+
+Current options:
+- `local_openai`: concrete local OpenAI-compatible provider adapter path
+- `placeholder`: deterministic fallback runtime
+
+Optional fallback behavior:
+- `runtime.allow_fallback_to_placeholder=true`
+- `runtime.fallback_provider="placeholder"`
+
+If the selected provider is unavailable at startup, runtime manager can engage fallback and expose this explicitly in status.
+
+## Model Registry
+Runtime config defines a structured model registry under `runtime.models` with fields:
+- `public_name`: client-visible model id
+- `provider_model_id`: provider-specific identifier/path
+- `role`: model intent (`general` or `coder`)
+- `enabled`: availability toggle
+- `metadata`: future extension area
+
+`GET /v1/models` is served from runtime-backed registry data, not hardcoded lists.
 
 ## Introspection Endpoints
 - `GET /health`
 - `GET /version`
 - `GET /system/status`
 
-## OpenAI Compatibility Endpoints (Week 3)
+## OpenAI Compatibility Endpoints (Week 4)
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 
@@ -64,9 +89,18 @@ Current implementation is in `backend/`:
 3. API passes typed request to controller.
 4. Controller validates model availability and routing constraints.
 5. Controller invokes runtime manager chat generation.
-6. Runtime manager invokes runtime backend.
+6. Runtime manager calls the active runtime backend (selected or fallback).
 7. Controller assembles OpenAI-compatible response shape.
 8. API returns JSON response and logs request outcome.
+
+## Runtime Status Reporting
+`GET /system/status` now reports:
+- selected provider
+- active provider
+- fallback engagement
+- runtime ready/degraded state
+- primary provider diagnostics
+- model registry summary
 
 ## Streaming Readiness
 - Request schema already supports `stream` field.

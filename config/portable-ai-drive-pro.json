@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.3.0-week3",
+    "version": "0.4.0-week4",
     "environment": "development"
   },
   "api": {
@@ -15,9 +15,40 @@
     "to_stdout": true
   },
   "runtime": {
-    "provider": "placeholder",
-    "default_model": "padp-placeholder-chat-001",
-    "startup_timeout_seconds": 5
+    "provider": "local_openai",
+    "fallback_provider": "placeholder",
+    "allow_fallback_to_placeholder": true,
+    "default_model": "local-general",
+    "startup_timeout_seconds": 5,
+    "models": [
+      {
+        "public_name": "local-general",
+        "provider_model_id": "llama3.2-general",
+        "role": "general",
+        "enabled": true,
+        "metadata": {
+          "description": "Primary local general assistant model",
+          "stage": "week4-bridge"
+        }
+      },
+      {
+        "public_name": "local-coder",
+        "provider_model_id": "qwen2.5-coder",
+        "role": "coder",
+        "enabled": false,
+        "metadata": {
+          "description": "Reserved for coding-focused flow",
+          "stage": "planned"
+        }
+      }
+    ],
+    "local_openai": {
+      "base_url": "http://127.0.0.1:8081",
+      "timeout_seconds": 5,
+      "health_path": "/health",
+      "models_path": "/v1/models",
+      "chat_completions_path": "/v1/chat/completions"
+    }
   },
   "operating_mode": {
     "offline_default": true

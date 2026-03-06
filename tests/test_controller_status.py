@@ -9,7 +9,13 @@ from backend.runtime import PlaceholderRuntime, RuntimeManager
 class ControllerStatusTests(unittest.TestCase):
     def test_system_status_contains_runtime_and_flags(self) -> None:
         config = load_config()
-        runtime = RuntimeManager(PlaceholderRuntime(config.runtime), logging.getLogger("test.runtime"))
+        runtime = RuntimeManager(
+            primary_backend=PlaceholderRuntime(config.runtime),
+            fallback_backend=None,
+            selected_provider="placeholder",
+            fallback_provider=None,
+            logger=logging.getLogger("test.runtime"),
+        )
         runtime.startup()
 
         controller = ControllerService(
@@ -29,6 +35,7 @@ class ControllerStatusTests(unittest.TestCase):
         self.assertTrue(status["offline_mode"])
         self.assertIn("runtime", status)
         self.assertIn("feature_flags", status)
+        self.assertIn("model_registry", status)
         self.assertEqual(status["runtime"]["provider"], "placeholder")
 
 

@@ -1,5 +1,6 @@
 """Runtime abstraction and manager."""
 
+from .factory import build_runtime_backends
 from .interfaces import (
     ChatGenerationChoice,
     ChatGenerationRequest,
@@ -7,7 +8,9 @@ from .interfaces import (
     ChatMessage,
     ModelInfo,
     RuntimeBackend,
+    RuntimeInvocationError,
     RuntimeStatus,
+    RuntimeUnavailableError,
 )
 from .manager import RuntimeManager
 from .placeholder import PlaceholderRuntime
@@ -19,7 +22,10 @@ __all__ = [
     "ChatMessage",
     "ModelInfo",
     "RuntimeBackend",
+    "RuntimeInvocationError",
     "RuntimeManager",
     "RuntimeStatus",
+    "RuntimeUnavailableError",
     "PlaceholderRuntime",
+    "build_runtime_backends",
 ]

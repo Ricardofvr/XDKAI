@@ -6,7 +6,7 @@ Development currently happens locally inside this repository in WSL. External SS
 ## Environment Assumptions
 - Linux environment via WSL
 - Repository opened in Cursor
-- Local model runtime choices remain undecided (model-agnostic)
+- Optional local OpenAI-compatible runtime provider may run on `127.0.0.1`
 
 ## Single Startup Path
 Use one command for local backend startup:
@@ -17,18 +17,19 @@ Use one command for local backend startup:
 
 This runs `python3 -m backend.main --config config/portable-ai-drive-pro.json`.
 
-## Introspection Checks
+## Runtime Behavior in Week 4
+Default config selects `local_openai` runtime with placeholder fallback.
+
+- If local runtime is reachable, provider mode is active.
+- If local runtime is unavailable, placeholder fallback engages automatically.
+- Runtime mode and fallback details are visible in `GET /system/status`.
+
+## Endpoint Checks
 After startup, validate:
 - `GET http://127.0.0.1:8080/health`
 - `GET http://127.0.0.1:8080/version`
 - `GET http://127.0.0.1:8080/system/status`
-
-## OpenAI Compatibility Checks (Week 3)
-List models:
-
-```bash
-curl -sS http://127.0.0.1:8080/v1/models
-```
+- `GET http://127.0.0.1:8080/v1/models`
 
 Create chat completion:
 
@@ -36,7 +37,7 @@ Create chat completion:
 curl -sS http://127.0.0.1:8080/v1/chat/completions \
   -H 'content-type: application/json' \
   -d '{
-    "model": "padp-placeholder-chat-001",
+    "model": "local-general",
     "messages": [{"role": "user", "content": "Hello"}],
     "temperature": 0.2,
     "max_tokens": 64,

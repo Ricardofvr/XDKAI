@@ -8,7 +8,7 @@ from backend.config import load_config
 from backend.config.schema import AppConfig
 from backend.controller import ControllerService
 from backend.logging_system import configure_structured_logging
-from backend.runtime import PlaceholderRuntime, RuntimeManager
+from backend.runtime import RuntimeManager, build_runtime_backends
 
 
 @dataclass
@@ -35,8 +35,14 @@ def bootstrap_application(config_path: str | Path | None = None) -> BackendAppli
 
     logger.info("config_loaded", extra={"event": "startup_step", "step": "config_loaded"})
 
-    runtime_backend = PlaceholderRuntime(config.runtime)
-    runtime_manager = RuntimeManager(runtime_backend, logger.getChild("runtime"))
+    primary_backend, fallback_backend = build_runtime_backends(config.runtime, logger.getChild("runtime.providers"))
+    runtime_manager = RuntimeManager(
+        primary_backend=primary_backend,
+        fallback_backend=fallback_backend,
+        selected_provider=config.runtime.provider,
+        fallback_provider=config.runtime.fallback_provider,
+        logger=logger.getChild("runtime"),
+    )
     runtime_manager.startup()
 
     startup_state = {

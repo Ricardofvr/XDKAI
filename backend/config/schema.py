@@ -26,10 +26,32 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
+class RuntimeModelConfig:
+    public_name: str
+    provider_model_id: str
+    role: str
+    enabled: bool
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LocalOpenAIProviderConfig:
+    base_url: str
+    timeout_seconds: int
+    health_path: str
+    models_path: str
+    chat_completions_path: str
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     provider: str
+    fallback_provider: str | None
+    allow_fallback_to_placeholder: bool
     default_model: str | None
     startup_timeout_seconds: int
+    models: list[RuntimeModelConfig]
+    local_openai: LocalOpenAIProviderConfig
 
 
 @dataclass(frozen=True)
