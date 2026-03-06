@@ -8,6 +8,21 @@ Development currently happens locally inside this repository in WSL. External SS
 - Repository opened in Cursor
 - Local model runtime choices remain undecided (model-agnostic)
 
+## Single Startup Path (Week 2)
+Use one command for local backend startup:
+
+```bash
+./scripts/run_backend.sh
+```
+
+This runs `python3 -m backend.main --config config/portable-ai-drive-pro.json`.
+
+## Introspection Checks
+After startup, validate:
+- `GET http://127.0.0.1:8080/health`
+- `GET http://127.0.0.1:8080/version`
+- `GET http://127.0.0.1:8080/system/status`
+
 ## Local-First Workflow
 1. Develop and test all modules locally in repo paths.
 2. Keep path handling relative/config-driven; avoid machine-specific assumptions.

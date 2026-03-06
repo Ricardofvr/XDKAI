@@ -1,0 +1,41 @@
+{
+  "app": {
+    "name": "Portable AI Drive PRO",
+    "version": "0.2.0-week2",
+    "environment": "development"
+  },
+  "api": {
+    "host": "127.0.0.1",
+    "port": 8080
+  },
+  "logging": {
+    "level": "INFO",
+    "directory": "data/logs",
+    "filename": "portable-ai-drive-pro.log",
+    "to_stdout": true
+  },
+  "runtime": {
+    "provider": "placeholder",
+    "default_model": null,
+    "startup_timeout_seconds": 5
+  },
+  "operating_mode": {
+    "offline_default": true
+  },
+  "feature_flags": {
+    "openai_compatible_api": false,
+    "tool_execution": false,
+    "memory": false,
+    "research": false
+  },
+  "placeholders": {
+    "policy_rules": {
+      "mode": "default-deny"
+    },
+    "tool_permissions": {},
+    "memory_settings": {},
+    "research_settings": {
+      "enabled": false
+    }
+  }
+}
