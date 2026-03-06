@@ -8,6 +8,7 @@ export function DiagnosticsPanel({ status }: Props) {
   const diagnostics: string[] = [];
   const runtime = status?.runtime;
   const ragIndex = status?.rag_index;
+  const ragChat = status?.rag_chat;
 
   if (!status) {
     diagnostics.push("No backend status available.");
@@ -29,6 +30,17 @@ export function DiagnosticsPanel({ status }: Props) {
   }
   if (ragIndex?.search_enabled === false) {
     diagnostics.push("Retrieval is currently unavailable.");
+  }
+  const lastRetrieval = ragChat?.last_retrieval_diagnostics;
+  if (lastRetrieval && typeof lastRetrieval === "object") {
+    const inputCount = Number(lastRetrieval["input_count"] ?? 0);
+    const outputCount = Number(lastRetrieval["output_count"] ?? 0);
+    if (inputCount > 0 && outputCount === 0) {
+      diagnostics.push("Retrieval results were filtered out by current quality thresholds.");
+    }
+    if (Boolean(lastRetrieval["budget_character_limit_applied"])) {
+      diagnostics.push("Context character budget was applied on the last retrieval.");
+    }
   }
 
   return (

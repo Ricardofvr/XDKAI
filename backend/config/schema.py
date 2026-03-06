@@ -93,7 +93,13 @@ class RagRetrievalConfig:
 @dataclass(frozen=True)
 class RagChatConfig:
     enabled: bool
+    retrieval_fetch_k: int
     max_context_chunks: int
+    max_context_characters: int
+    max_chunks_per_document: int
+    deduplicate_results: bool
+    near_duplicate_threshold: float
+    min_similarity: float
     context_prefix: str
     include_source_metadata: bool
     debug_retrieval: bool

@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.9.0-week9",
+    "version": "0.10.0-week10",
     "environment": "development"
   },
   "api": {
@@ -91,7 +91,13 @@
     },
     "chat": {
       "enabled": true,
+      "retrieval_fetch_k": 8,
       "max_context_chunks": 3,
+      "max_context_characters": 4200,
+      "max_chunks_per_document": 2,
+      "deduplicate_results": true,
+      "near_duplicate_threshold": 0.92,
+      "min_similarity": 0.1,
       "context_prefix": "You have access to the following local context. Use it when relevant and cite source metadata in your reasoning.",
       "include_source_metadata": true,
       "debug_retrieval": false

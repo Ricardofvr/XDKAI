@@ -27,11 +27,18 @@ export type RagIndexStatus = {
 
 export type RagChatStatus = {
   enabled?: boolean;
+  retrieval_fetch_k?: number;
   max_context_chunks?: number;
+  max_context_characters?: number;
+  max_chunks_per_document?: number;
+  deduplicate_results?: boolean;
+  near_duplicate_threshold?: number;
+  min_similarity?: number;
   index_ready?: boolean;
   retrieval_enabled?: boolean;
   include_source_metadata?: boolean;
   debug_retrieval?: boolean;
+  last_retrieval_diagnostics?: Record<string, unknown> | null;
 };
 
 export type ModelRegistryEntry = {

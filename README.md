@@ -2,8 +2,8 @@
 
 Portable AI Drive PRO is a local, offline-first, privacy-first AI operating environment under development in this repository.
 
-## Current Status (Week 9 + Dashboard v0.1)
-Week 1 through Week 9 foundations are complete:
+## Current Status (Week 10 + Dashboard v0.1)
+Week 1 through Week 10 foundations are complete:
 - Product and architecture definitions with explicit trust boundaries
 - Backend startup lifecycle, typed file-driven config, structured logging
 - Controller-orchestrated OpenAI-compatible API
@@ -27,6 +27,12 @@ Week 1 through Week 9 foundations are complete:
   - fallback to normal chat when retrieval is unavailable/fails
   - optional retrieval debug metadata in chat response (`rag.chat.debug_retrieval=true`)
   - RAG chat status in `GET /system/status` under `rag_chat`
+- RAG quality controls (Week 10):
+  - retrieval post-processing before context injection
+  - exact/near-duplicate suppression and per-document chunk caps
+  - configurable context budgeting (`max_context_chunks` + `max_context_characters`)
+  - improved context format for clearer grounding boundaries
+  - request-level retrieval diagnostics persisted in `GET /system/status` (`rag_chat.last_retrieval_diagnostics`)
 - Dashboard v0.1 (post-Week 9 milestone):
   - local React-based developer control center
   - system overview and diagnostics panels
@@ -104,7 +110,7 @@ JSON output (useful for tooling/tests):
 python -m backend.rag.retrieval search "vector store architecture" --json
 ```
 
-## RAG Chat Test (Week 9)
+## RAG Chat Test (Week 10 Quality Path)
 1. Index content:
 
 ```bash
@@ -125,7 +131,17 @@ curl -sS http://127.0.0.1:8080/v1/chat/completions \
 
 Optional debug mode:
 - set `rag.chat.debug_retrieval=true` in config
-- response will include `rag_debug` metadata for retrieval usage/chunks.
+- response will include `rag_debug` metadata with retrieval counts, filtering, budgeting, and source chunks.
+
+## Week 10 RAG Tuning Knobs
+`config/portable-ai-drive-pro.json` -> `rag.chat`:
+- `retrieval_fetch_k`
+- `max_context_chunks`
+- `max_context_characters`
+- `max_chunks_per_document`
+- `deduplicate_results`
+- `near_duplicate_threshold`
+- `min_similarity`
 
 ## Dashboard v0.1
 Dashboard v0.1 is an internal testing cockpit for development.

@@ -176,7 +176,7 @@ class RagChatIntegrationTests(unittest.TestCase):
         assert backend.last_chat_request is not None
         self.assertEqual(len(backend.last_chat_request.messages), 2)
         self.assertEqual(backend.last_chat_request.messages[0].role, "system")
-        self.assertIn("Retrieved Context", backend.last_chat_request.messages[0].content)
+        self.assertIn("BEGIN_RETRIEVED_CONTEXT", backend.last_chat_request.messages[0].content)
         self.assertEqual(backend.last_chat_request.messages[1].content, "Explain architecture")
 
     def test_chat_skips_retrieval_when_disabled(self) -> None:
@@ -262,7 +262,51 @@ class RagChatIntegrationTests(unittest.TestCase):
         self.assertIn("rag_debug", response)
         self.assertTrue(response["rag_debug"]["retrieval_triggered"])
         self.assertTrue(response["rag_debug"]["retrieval_used"])
-        self.assertEqual(response["rag_debug"]["result_count"], 1)
+        self.assertEqual(response["rag_debug"]["retrieval_result_count_raw"], 1)
+        self.assertEqual(response["rag_debug"]["retrieval_result_count_injected"], 1)
+        self.assertIn("postprocess", response["rag_debug"])
+
+    def test_chat_falls_back_when_retrieval_results_filtered_out(self) -> None:
+        def mutate(data):
+            data["rag"]["chat"].update({"enabled": True, "debug_retrieval": True, "min_similarity": 0.95})
+
+        config = _load_mutated_config(mutate)
+        retrieval_response = RetrievalResponse(
+            query="Explain architecture",
+            embedding_model="local-embedding",
+            similarity_metric="cosine",
+            top_k=3,
+            min_similarity=-1.0,
+            result_count=1,
+            results=[
+                RetrievalHit(
+                    rank=1,
+                    similarity=0.82,
+                    document_id="doc1",
+                    source_file="/tmp/sample.txt",
+                    chunk_index=0,
+                    chunk_text="Architecture context",
+                    chunk_preview="Architecture context",
+                    text_length=20,
+                    metadata={"document_id": "doc1", "chunk_index": 0},
+                )
+            ],
+        )
+        retrieval_service = _FakeRetrievalService(response=retrieval_response)
+        controller, backend = self._build_controller(config, retrieval_service)
+
+        request = ChatGenerationRequest(
+            model="local-general",
+            messages=[ChatMessage(role="user", content="Explain architecture")],
+            stream=False,
+            request_id="req_rag_5",
+        )
+
+        response = controller.create_chat_completion(request)
+        assert backend.last_chat_request is not None
+        self.assertEqual(len(backend.last_chat_request.messages), 1)
+        self.assertFalse(response["rag_debug"]["retrieval_used"])
+        self.assertEqual(response["rag_debug"]["skipped_reason"], "retrieval_results_filtered_empty")
 
 
 if __name__ == "__main__":

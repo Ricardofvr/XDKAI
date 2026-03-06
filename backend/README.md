@@ -1,6 +1,6 @@
 # Backend Service
 
-This package contains the Week 9 backend foundation for Portable AI Drive PRO.
+This package contains the Week 10 backend foundation for Portable AI Drive PRO.
 
 ## Responsibilities
 - Startup bootstrap sequencing
@@ -24,8 +24,13 @@ This package contains the Week 9 backend foundation for Portable AI Drive PRO.
   - ranked retrieval CLI output for indexed chunks
 - RAG chat integration:
   - retrieval trigger in controller chat flow
+  - retrieval post-processing + context budgeting (`backend/rag/retrieval_postprocessing.py`)
   - context builder + message injection (`backend/rag/context_builder.py`)
   - graceful fallback to plain generation when retrieval is unavailable
+  - request-level retrieval diagnostics in `rag_chat.last_retrieval_diagnostics` (`/system/status`)
+  - tunable quality controls in config (`rag.chat.*`):
+    - `retrieval_fetch_k`, `max_context_chunks`, `max_context_characters`
+    - `max_chunks_per_document`, `deduplicate_results`, `near_duplicate_threshold`, `min_similarity`
 
 ## Entrypoints
 - Backend API service:

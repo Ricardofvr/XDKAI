@@ -242,6 +242,9 @@ def _parse_rag_config(
         if "/" in value or "\\" in value:
             raise ConfigError(f"Config value 'rag.index.{key}' must be a filename, not a path.")
 
+    retrieval_config = _parse_rag_retrieval_config(rag_section_raw)
+    chat_config = _parse_rag_chat_config(rag_section_raw, default_min_similarity=retrieval_config.min_similarity)
+
     return RagConfig(
         enabled=rag_enabled,
         default_embedding_model=rag_default_embedding_model,
@@ -255,8 +258,8 @@ def _parse_rag_config(
             documents_filename=documents_filename,
             metadata_filename=metadata_filename,
         ),
-        retrieval=_parse_rag_retrieval_config(rag_section_raw),
-        chat=_parse_rag_chat_config(rag_section_raw),
+        retrieval=retrieval_config,
+        chat=chat_config,
     )
 
 
@@ -291,7 +294,7 @@ def _parse_rag_retrieval_config(rag_section_raw: dict[str, Any]) -> RagRetrieval
     )
 
 
-def _parse_rag_chat_config(rag_section_raw: dict[str, Any]) -> RagChatConfig:
+def _parse_rag_chat_config(rag_section_raw: dict[str, Any], default_min_similarity: float) -> RagChatConfig:
     chat_section = rag_section_raw.get("chat", {})
     if not isinstance(chat_section, dict):
         raise ConfigError("Config value 'rag.chat' must be an object when provided.")
@@ -303,6 +306,38 @@ def _parse_rag_chat_config(rag_section_raw: dict[str, Any]) -> RagChatConfig:
     max_context_chunks = chat_section.get("max_context_chunks", 3)
     if not isinstance(max_context_chunks, int) or max_context_chunks <= 0:
         raise ConfigError("Config value 'rag.chat.max_context_chunks' must be a positive integer.")
+
+    retrieval_fetch_k = chat_section.get("retrieval_fetch_k", max(max_context_chunks * 4, max_context_chunks))
+    if not isinstance(retrieval_fetch_k, int) or retrieval_fetch_k <= 0:
+        raise ConfigError("Config value 'rag.chat.retrieval_fetch_k' must be a positive integer.")
+    if retrieval_fetch_k < max_context_chunks:
+        raise ConfigError("Config value 'rag.chat.retrieval_fetch_k' must be >= rag.chat.max_context_chunks.")
+
+    max_context_characters = chat_section.get("max_context_characters", 5000)
+    if not isinstance(max_context_characters, int) or max_context_characters <= 0:
+        raise ConfigError("Config value 'rag.chat.max_context_characters' must be a positive integer.")
+
+    max_chunks_per_document = chat_section.get("max_chunks_per_document", 2)
+    if not isinstance(max_chunks_per_document, int) or max_chunks_per_document <= 0:
+        raise ConfigError("Config value 'rag.chat.max_chunks_per_document' must be a positive integer.")
+
+    deduplicate_results = chat_section.get("deduplicate_results", True)
+    if not isinstance(deduplicate_results, bool):
+        raise ConfigError("Config value 'rag.chat.deduplicate_results' must be a boolean.")
+
+    near_duplicate_threshold_raw = chat_section.get("near_duplicate_threshold", 0.92)
+    if not isinstance(near_duplicate_threshold_raw, (int, float)):
+        raise ConfigError("Config value 'rag.chat.near_duplicate_threshold' must be a number.")
+    near_duplicate_threshold = float(near_duplicate_threshold_raw)
+    if near_duplicate_threshold < 0.0 or near_duplicate_threshold > 1.0:
+        raise ConfigError("Config value 'rag.chat.near_duplicate_threshold' must be between 0.0 and 1.0.")
+
+    min_similarity_raw = chat_section.get("min_similarity", default_min_similarity)
+    if not isinstance(min_similarity_raw, (int, float)):
+        raise ConfigError("Config value 'rag.chat.min_similarity' must be a number.")
+    min_similarity = float(min_similarity_raw)
+    if min_similarity < -1.0 or min_similarity > 1.0:
+        raise ConfigError("Config value 'rag.chat.min_similarity' must be between -1.0 and 1.0.")
 
     context_prefix = chat_section.get(
         "context_prefix",
@@ -321,7 +356,13 @@ def _parse_rag_chat_config(rag_section_raw: dict[str, Any]) -> RagChatConfig:
 
     return RagChatConfig(
         enabled=enabled,
+        retrieval_fetch_k=retrieval_fetch_k,
         max_context_chunks=max_context_chunks,
+        max_context_characters=max_context_characters,
+        max_chunks_per_document=max_chunks_per_document,
+        deduplicate_results=deduplicate_results,
+        near_duplicate_threshold=near_duplicate_threshold,
+        min_similarity=min_similarity,
         context_prefix=context_prefix.strip(),
         include_source_metadata=include_source_metadata,
         debug_retrieval=debug_retrieval,

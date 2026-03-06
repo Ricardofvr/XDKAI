@@ -5,11 +5,16 @@ import time
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any
 
 from backend.config.schema import AppConfig
 from backend.rag.context_builder import build_context_text, inject_context_before_latest_user
 from backend.rag.retrieval import RetrievalService
+from backend.rag.retrieval_postprocessing import (
+    RetrievalPostprocessConfig,
+    postprocess_retrieval_hits,
+)
 from backend.runtime.interfaces import (
     ChatGenerationRequest,
     ChatMessage,
@@ -40,6 +45,8 @@ class ControllerService:
         self._startup_state = startup_state
         self._rag_vector_store = rag_vector_store
         self._rag_retrieval_service = rag_retrieval_service
+        self._rag_diagnostics_lock = Lock()
+        self._last_rag_diagnostics: dict[str, Any] | None = None
 
         # Week 2 placeholders for future orchestrated subsystems.
         self._policy_manager = None
@@ -202,14 +209,23 @@ class ControllerService:
             and rag_index_status.get("search_enabled")
             and self._rag_retrieval_service is not None
         )
+        with self._rag_diagnostics_lock:
+            last_diagnostics = dict(self._last_rag_diagnostics) if self._last_rag_diagnostics else None
 
         return {
             "enabled": bool(self._config.rag.chat.enabled),
+            "retrieval_fetch_k": self._config.rag.chat.retrieval_fetch_k,
             "max_context_chunks": self._config.rag.chat.max_context_chunks,
+            "max_context_characters": self._config.rag.chat.max_context_characters,
+            "max_chunks_per_document": self._config.rag.chat.max_chunks_per_document,
+            "deduplicate_results": self._config.rag.chat.deduplicate_results,
+            "near_duplicate_threshold": self._config.rag.chat.near_duplicate_threshold,
+            "min_similarity": self._config.rag.chat.min_similarity,
             "index_ready": index_ready,
             "retrieval_enabled": retrieval_enabled,
             "include_source_metadata": self._config.rag.chat.include_source_metadata,
             "debug_retrieval": self._config.rag.chat.debug_retrieval,
+            "last_retrieval_diagnostics": last_diagnostics,
         }
 
     def list_models(self) -> dict[str, Any]:
@@ -259,8 +275,12 @@ class ControllerService:
         rag_debug: dict[str, Any] = {
             "retrieval_triggered": False,
             "retrieval_used": False,
-            "result_count": 0,
+            "retrieval_result_count_raw": 0,
+            "retrieval_result_count_filtered": 0,
+            "retrieval_result_count_injected": 0,
+            "postprocess": None,
             "chunks": [],
+            "skipped_reason": None,
             "error": None,
         }
 
@@ -268,6 +288,10 @@ class ControllerService:
             latest_user = self._extract_latest_user_message(request.messages)
             if latest_user is not None:
                 rag_debug["retrieval_triggered"] = True
+                retrieval_top_k = max(
+                    self._config.rag.chat.retrieval_fetch_k,
+                    self._config.rag.chat.max_context_chunks,
+                )
                 self._logger.info(
                     "controller_rag_retrieval_triggered",
                     extra={
@@ -275,18 +299,38 @@ class ControllerService:
                         "request_id": request.request_id,
                         "query_length": len(latest_user.content),
                         "max_context_chunks": self._config.rag.chat.max_context_chunks,
+                        "retrieval_top_k": retrieval_top_k,
                     },
                 )
 
                 try:
                     retrieval_response = self._rag_retrieval_service.search(
                         query=latest_user.content,
-                        top_k=self._config.rag.chat.max_context_chunks,
+                        top_k=retrieval_top_k,
                     )
-                    rag_debug["result_count"] = retrieval_response.result_count
+                    rag_debug["retrieval_result_count_raw"] = retrieval_response.result_count
+                    processed = postprocess_retrieval_hits(
+                        retrieval_response.results,
+                        RetrievalPostprocessConfig(
+                            min_similarity=self._config.rag.chat.min_similarity,
+                            deduplicate_results=self._config.rag.chat.deduplicate_results,
+                            near_duplicate_threshold=self._config.rag.chat.near_duplicate_threshold,
+                            max_chunks_per_document=self._config.rag.chat.max_chunks_per_document,
+                            max_context_chunks=self._config.rag.chat.max_context_chunks,
+                            max_context_characters=self._config.rag.chat.max_context_characters,
+                        ),
+                    )
+                    postprocess_payload = asdict(processed.diagnostics)
+                    rag_debug["postprocess"] = postprocess_payload
+                    rag_debug["retrieval_result_count_filtered"] = processed.diagnostics.post_filter_count
+                    rag_debug["retrieval_result_count_injected"] = processed.diagnostics.output_count
+                    self._record_rag_diagnostics(
+                        request_id=request.request_id,
+                        diagnostics=postprocess_payload,
+                    )
 
-                    if retrieval_response.results:
-                        selected_hits = retrieval_response.results[: self._config.rag.chat.max_context_chunks]
+                    if processed.hits:
+                        selected_hits = processed.hits
                         context_text = build_context_text(
                             hits=selected_hits,
                             context_prefix=self._config.rag.chat.context_prefix,
@@ -308,8 +352,11 @@ class ControllerService:
                         rag_debug["chunks"] = [
                             {
                                 "source_file": hit.source_file,
+                                "document_id": hit.document_id,
                                 "chunk_index": hit.chunk_index,
                                 "similarity": round(hit.similarity, 4),
+                                "text_length": hit.text_length,
+                                "truncated": bool(hit.metadata.get("truncated", False)),
                             }
                             for hit in selected_hits
                         ]
@@ -318,20 +365,34 @@ class ControllerService:
                             extra={
                                 "event": "controller_rag",
                                 "request_id": request.request_id,
-                                "result_count": retrieval_response.result_count,
+                                "result_count_raw": retrieval_response.result_count,
+                                "result_count_filtered": processed.diagnostics.post_filter_count,
                                 "injected_chunks": len(selected_hits),
+                                "injected_characters": processed.diagnostics.output_characters,
+                                "duplicate_filtered_count": processed.diagnostics.duplicate_filtered_count,
+                                "near_duplicate_filtered_count": processed.diagnostics.near_duplicate_filtered_count,
+                                "per_document_filtered_count": processed.diagnostics.per_document_filtered_count,
+                                "similarity_filtered_count": processed.diagnostics.similarity_filtered_count,
+                                "budget_chunk_limit_applied": processed.diagnostics.budget_chunk_limit_applied,
+                                "budget_character_limit_applied": processed.diagnostics.budget_character_limit_applied,
+                                "budget_truncated_count": processed.diagnostics.budget_truncated_count,
                             },
                         )
                     else:
+                        rag_debug["skipped_reason"] = "retrieval_results_filtered_empty"
                         self._logger.info(
-                            "controller_rag_no_results",
+                            "controller_rag_context_skipped",
                             extra={
                                 "event": "controller_rag",
                                 "request_id": request.request_id,
+                                "reason": rag_debug["skipped_reason"],
+                                "result_count_raw": retrieval_response.result_count,
+                                "result_count_filtered": processed.diagnostics.post_filter_count,
                             },
                         )
                 except Exception as exc:  # noqa: BLE001
                     rag_debug["error"] = str(exc)
+                    rag_debug["skipped_reason"] = "retrieval_failed"
                     self._logger.warning(
                         "controller_rag_retrieval_failed",
                         extra={
@@ -341,6 +402,7 @@ class ControllerService:
                         },
                     )
             else:
+                rag_debug["skipped_reason"] = "no_user_message"
                 self._logger.info(
                     "controller_rag_skipped_no_user_message",
                     extra={
@@ -348,6 +410,24 @@ class ControllerService:
                         "request_id": request.request_id,
                     },
                 )
+        elif not self._config.rag.enabled:
+            rag_debug["skipped_reason"] = "rag_disabled"
+        elif not self._config.rag.chat.enabled:
+            rag_debug["skipped_reason"] = "rag_chat_disabled"
+        elif self._rag_retrieval_service is None:
+            rag_debug["skipped_reason"] = "retrieval_unavailable"
+
+        if rag_debug["retrieval_triggered"] and not rag_debug["retrieval_used"] and rag_debug["postprocess"] is None:
+            self._record_rag_diagnostics(
+                request_id=request.request_id,
+                diagnostics={
+                    "input_count": rag_debug["retrieval_result_count_raw"],
+                    "post_filter_count": rag_debug["retrieval_result_count_filtered"],
+                    "output_count": rag_debug["retrieval_result_count_injected"],
+                    "output_characters": 0,
+                    "skipped_reason": rag_debug["skipped_reason"],
+                },
+            )
 
         try:
             runtime_response = self._runtime_manager.generate_chat(runtime_request)
@@ -404,7 +484,8 @@ class ControllerService:
                 "request_id": request.request_id,
                 "completion_id": completion_id,
                 "rag_retrieval_used": rag_debug["retrieval_used"],
-                "rag_result_count": rag_debug["result_count"],
+                "rag_result_count_raw": rag_debug["retrieval_result_count_raw"],
+                "rag_result_count_injected": rag_debug["retrieval_result_count_injected"],
             },
         )
 
@@ -543,6 +624,15 @@ class ControllerService:
             ) from exc
 
         return asdict(response)
+
+    def _record_rag_diagnostics(self, request_id: str | None, diagnostics: dict[str, Any]) -> None:
+        payload = {
+            "captured_at_utc": datetime.now(timezone.utc).isoformat(),
+            "request_id": request_id,
+            **diagnostics,
+        }
+        with self._rag_diagnostics_lock:
+            self._last_rag_diagnostics = payload
 
     def _extract_latest_user_message(self, messages: list[ChatMessage]) -> ChatMessage | None:
         for message in reversed(messages):

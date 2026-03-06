@@ -15,19 +15,28 @@ def build_context_text(
     if not hits:
         raise ValueError("hits must not be empty.")
 
-    lines: list[str] = [context_prefix.strip(), "", "Retrieved Context:"]
+    lines: list[str] = [
+        context_prefix.strip(),
+        "",
+        "Use retrieved context as supporting evidence for the answer.",
+        "If context is insufficient, explicitly say that indexed context is limited.",
+        "",
+        "BEGIN_RETRIEVED_CONTEXT",
+    ]
 
     for index, hit in enumerate(hits, start=1):
-        lines.append(f"Chunk {index}:")
+        lines.append(f"[Context {index}]")
+        lines.append(f"- rank: {index}")
         if include_source_metadata:
             lines.append(f"- source: {hit.source_file}")
             lines.append(f"- document_id: {hit.document_id}")
             lines.append(f"- chunk_index: {hit.chunk_index}")
             lines.append(f"- similarity: {hit.similarity:.4f}")
+        lines.append("- content:")
         lines.append(hit.chunk_text)
         lines.append("")
 
-    lines.append("Use this context when it is relevant and accurate for the user request.")
+    lines.append("END_RETRIEVED_CONTEXT")
     return "\n".join(lines).strip()
 
 

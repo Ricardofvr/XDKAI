@@ -28,6 +28,7 @@ class ContextBuilderTests(unittest.TestCase):
         )
 
         self.assertIn("Use the context below.", text)
+        self.assertIn("BEGIN_RETRIEVED_CONTEXT", text)
         self.assertIn("source: /tmp/sample.txt", text)
         self.assertIn("similarity: 0.9100", text)
         self.assertIn("System architecture uses controller orchestration.", text)

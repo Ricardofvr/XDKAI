@@ -31,7 +31,7 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 9)
+## Implemented Shape (Week 10)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
@@ -44,6 +44,7 @@ Current implementation is in `backend/`:
 - `backend/rag/vector_store/`: persistent local vector storage + index metadata + similarity search
 - `backend/rag/indexer.py`: indexing pipeline + CLI entrypoint
 - `backend/rag/retrieval.py`: retrieval service + CLI entrypoint
+- `backend/rag/retrieval_postprocessing.py`: retrieval quality filtering + context budget enforcement
 - `backend/rag/context_builder.py`: retrieved-context prompt construction and message injection helper
 
 ## Startup Sequence
@@ -129,35 +130,42 @@ Model resolution rules:
   - `similarity_metric`
   - `min_similarity`
 
-## RAG Chat Integration (Week 9)
+## RAG Chat Integration (Week 9-10)
 ### Chat + Retrieval Flow
-`Chat Request -> Controller -> RetrievalService -> RuntimeManager (embeddings) -> VectorStore -> ContextBuilder -> RuntimeManager (generation) -> Response`
+`Chat Request -> Controller -> RetrievalService -> RuntimeManager (embeddings) -> VectorStore -> RetrievalPostprocessing -> ContextBuilder -> RuntimeManager (generation) -> Response`
 
 Controller behavior:
 1. Validate chat request.
 2. Extract latest user message.
 3. If `rag.chat.enabled=true`, run retrieval for that query.
-4. If chunks are returned, build a context block and inject it before the latest user message.
-5. Call generation runtime with the augmented messages.
-6. If retrieval fails, log and continue with normal generation (no hard failure).
+4. Apply post-processing quality controls:
+   - min-similarity filtering
+   - exact duplicate + near-duplicate suppression
+   - same-document chunk limiting
+   - context budgeting (`max_context_chunks`, `max_context_characters`)
+5. If filtered chunks are returned, build a context block and inject it before the latest user message.
+6. Call generation runtime with the augmented messages.
+7. If retrieval fails or filtered context is empty, log and continue with normal generation (no hard failure).
 
 ### Context Injection Strategy
 - Context is formatted as a `system` message containing:
   - configurable prefix (`rag.chat.context_prefix`)
-  - selected chunks (up to `rag.chat.max_context_chunks`)
+  - clearly delimited retrieved context block (`BEGIN_RETRIEVED_CONTEXT` / `END_RETRIEVED_CONTEXT`)
+  - selected chunks (bounded by chunk + character budgets)
   - optional source metadata (`rag.chat.include_source_metadata`)
 - Injection point: immediately before the latest user message.
 
 ### Debug Mode
 - `rag.chat.debug_retrieval=true` enables chat response `rag_debug` metadata.
+- `rag_debug` now includes raw/filtered/injected counts and quality diagnostics from post-processing.
 - Intended for local development/troubleshooting only.
 
 ## Current Scope Boundary
-Week 9 adds retrieval-augmented chat context injection.
+Week 10 adds retrieval quality controls for cleaner RAG context injection.
 Not implemented yet:
 - reranking/hybrid retrieval
 - chat streaming with RAG metadata chunks
-- advanced context-window packing/deduplication
+- learned reranking models
 
 ## Dashboard v0.1 (UI Milestone)
 - Local React dashboard under `ui/dashboard`.
@@ -207,11 +215,18 @@ Failures are logged with structured diagnostics and returned as structured API e
   - retrieval settings (`top_k`, `similarity_metric`, `min_similarity`)
 - `rag_chat` state:
   - `enabled`
+  - `retrieval_fetch_k`
   - `max_context_chunks`
+  - `max_context_characters`
+  - `max_chunks_per_document`
+  - `deduplicate_results`
+  - `near_duplicate_threshold`
+  - `min_similarity`
   - `index_ready`
   - `retrieval_enabled`
   - `include_source_metadata`
   - `debug_retrieval`
+  - `last_retrieval_diagnostics`
 
 ## Streaming Readiness
 - Chat request schema supports `stream` field but streaming is not implemented yet.
