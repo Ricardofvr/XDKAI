@@ -1,6 +1,6 @@
 # Backend Service
 
-This package contains the Week 2 backend skeleton for Portable AI Drive PRO.
+This package contains the Week 3 backend skeleton for Portable AI Drive PRO.
 
 ## Responsibilities
 - Startup bootstrap sequencing
@@ -9,6 +9,7 @@ This package contains the Week 2 backend skeleton for Portable AI Drive PRO.
 - Runtime abstraction setup
 - Controller initialization
 - Introspection API exposure
+- OpenAI-compatible namespace skeleton (`/v1/models`, `/v1/chat/completions`)
 
 ## Entrypoint
 - `python3 -m backend.main`

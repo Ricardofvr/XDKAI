@@ -8,7 +8,7 @@ Development currently happens locally inside this repository in WSL. External SS
 - Repository opened in Cursor
 - Local model runtime choices remain undecided (model-agnostic)
 
-## Single Startup Path (Week 2)
+## Single Startup Path
 Use one command for local backend startup:
 
 ```bash
@@ -22,6 +22,27 @@ After startup, validate:
 - `GET http://127.0.0.1:8080/health`
 - `GET http://127.0.0.1:8080/version`
 - `GET http://127.0.0.1:8080/system/status`
+
+## OpenAI Compatibility Checks (Week 3)
+List models:
+
+```bash
+curl -sS http://127.0.0.1:8080/v1/models
+```
+
+Create chat completion:
+
+```bash
+curl -sS http://127.0.0.1:8080/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "padp-placeholder-chat-001",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "temperature": 0.2,
+    "max_tokens": 64,
+    "stream": false
+  }'
+```
 
 ## Local-First Workflow
 1. Develop and test all modules locally in repo paths.

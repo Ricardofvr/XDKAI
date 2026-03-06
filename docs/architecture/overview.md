@@ -31,17 +31,17 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Week 2 Implemented Shape
+## Implemented Shape (Week 3)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
-- `backend/bootstrap.py`: explicit startup sequencing and dependency wiring
+- `backend/bootstrap.py`: startup sequencing and dependency wiring
 - `backend/config/`: typed config schema + file loader
 - `backend/logging_system/`: structured JSON logging initialization
 - `backend/runtime/`: runtime interface, placeholder backend, runtime manager
-- `backend/controller/`: central controller skeleton and status aggregation
-- `backend/api/`: HTTP service exposing introspection endpoints
+- `backend/controller/`: orchestration boundary for health, models, and chat completion flow
+- `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility skeleton
 
-## Startup Sequence (Week 2)
+## Startup Sequence
 1. Load config from `config/portable-ai-drive-pro.json`.
 2. Initialize structured logging (file + stdout per config).
 3. Initialize runtime manager with provider-agnostic placeholder runtime.
@@ -49,12 +49,29 @@ Current implementation is in `backend/`:
 5. Initialize API server and route bindings.
 6. Start serving local requests.
 
-## Request Flow (Current)
-1. Client calls local introspection endpoint.
-2. API route delegates to controller service.
-3. Controller aggregates runtime and config-derived status.
-4. API returns structured JSON response.
-5. Structured logs capture request metadata.
+## Introspection Endpoints
+- `GET /health`
+- `GET /version`
+- `GET /system/status`
+
+## OpenAI Compatibility Endpoints (Week 3)
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+
+### Chat Request Flow
+1. Client sends OpenAI-style payload to `/v1/chat/completions`.
+2. API layer validates payload fields (`model`, `messages`, `temperature`, `max_tokens`, `stream`).
+3. API passes typed request to controller.
+4. Controller validates model availability and routing constraints.
+5. Controller invokes runtime manager chat generation.
+6. Runtime manager invokes runtime backend.
+7. Controller assembles OpenAI-compatible response shape.
+8. API returns JSON response and logs request outcome.
+
+## Streaming Readiness
+- Request schema already supports `stream` field.
+- Runtime interface includes a `stream_chat` contract for future token/chunk iteration.
+- `stream=true` is currently rejected as unsupported until streaming implementation is added.
 
 ## Planned Request Flow (Later)
 1. Client sends request to OpenAI-compatible API.

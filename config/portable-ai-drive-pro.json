@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.2.0-week2",
+    "version": "0.3.0-week3",
     "environment": "development"
   },
   "api": {
@@ -16,14 +16,14 @@
   },
   "runtime": {
     "provider": "placeholder",
-    "default_model": null,
+    "default_model": "padp-placeholder-chat-001",
     "startup_timeout_seconds": 5
   },
   "operating_mode": {
     "offline_default": true
   },
   "feature_flags": {
-    "openai_compatible_api": false,
+    "openai_compatible_api": true,
     "tool_execution": false,
     "memory": false,
     "research": false
