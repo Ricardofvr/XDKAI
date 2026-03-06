@@ -78,6 +78,8 @@ class ControllerStatusTests(unittest.TestCase):
             self.assertTrue(rag_index["initialized"])
             self.assertIn("documents_indexed", rag_index)
             self.assertIn("total_vectors", rag_index)
+            self.assertIn("search_enabled", rag_index)
+            self.assertIn("retrieval", rag_index)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from .schema import (
     RagChunkingConfig,
     RagConfig,
     RagIndexConfig,
+    RagRetrievalConfig,
     RuntimeConfig,
     RuntimeModelConfig,
 )
@@ -28,6 +29,7 @@ ALLOWED_RUNTIME_PROVIDERS = {"placeholder", "local_openai"}
 ALLOWED_MODEL_ROLES = {"general", "coder", "embedding"}
 GENERATION_MODEL_ROLES = {"general", "coder"}
 EMBEDDING_MODEL_ROLE = "embedding"
+ALLOWED_RETRIEVAL_METRICS = {"cosine"}
 
 
 class ConfigError(RuntimeError):
@@ -252,6 +254,38 @@ def _parse_rag_config(
             documents_filename=documents_filename,
             metadata_filename=metadata_filename,
         ),
+        retrieval=_parse_rag_retrieval_config(rag_section_raw),
+    )
+
+
+def _parse_rag_retrieval_config(rag_section_raw: dict[str, Any]) -> RagRetrievalConfig:
+    retrieval_section = rag_section_raw.get("retrieval", {})
+    if not isinstance(retrieval_section, dict):
+        raise ConfigError("Config value 'rag.retrieval' must be an object when provided.")
+
+    top_k = retrieval_section.get("top_k", 3)
+    if not isinstance(top_k, int) or top_k <= 0:
+        raise ConfigError("Config value 'rag.retrieval.top_k' must be a positive integer.")
+
+    similarity_metric = retrieval_section.get("similarity_metric", "cosine")
+    if not isinstance(similarity_metric, str) or not similarity_metric.strip():
+        raise ConfigError("Config value 'rag.retrieval.similarity_metric' must be a non-empty string.")
+    if similarity_metric not in ALLOWED_RETRIEVAL_METRICS:
+        raise ConfigError(
+            f"Config value 'rag.retrieval.similarity_metric' must be one of: {', '.join(sorted(ALLOWED_RETRIEVAL_METRICS))}."
+        )
+
+    min_similarity_raw = retrieval_section.get("min_similarity", 0.0)
+    if not isinstance(min_similarity_raw, (int, float)):
+        raise ConfigError("Config value 'rag.retrieval.min_similarity' must be a number.")
+    min_similarity = float(min_similarity_raw)
+    if min_similarity < -1.0 or min_similarity > 1.0:
+        raise ConfigError("Config value 'rag.retrieval.min_similarity' must be between -1.0 and 1.0.")
+
+    return RagRetrievalConfig(
+        top_k=top_k,
+        similarity_metric=similarity_metric,
+        min_similarity=min_similarity,
     )
 
 

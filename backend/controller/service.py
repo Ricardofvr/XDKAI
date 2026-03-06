@@ -73,7 +73,7 @@ class ControllerService:
             "runtime": runtime_status,
             "runtime_metadata": self._runtime_manager.get_metadata(),
             "model_registry": self._runtime_manager.get_model_registry_payload(),
-            "rag_index": self._get_rag_index_status(),
+            "rag_index": self._get_rag_index_status(runtime_status=runtime_status),
             "feature_flags": {
                 "openai_compatible_api": self._config.feature_flags.openai_compatible_api,
                 "tool_execution": self._config.feature_flags.tool_execution,
@@ -91,7 +91,7 @@ class ControllerService:
     def mark_startup_step(self, step_name: str, completed: bool = True) -> None:
         self._startup_state[step_name] = completed
 
-    def _get_rag_index_status(self) -> dict[str, Any]:
+    def _get_rag_index_status(self, runtime_status: dict[str, Any]) -> dict[str, Any]:
         if self._rag_vector_store is None:
             return {
                 "enabled": False,
@@ -100,14 +100,36 @@ class ControllerService:
                 "total_vectors": 0,
                 "embedding_models": [],
                 "index_location": None,
+                "search_enabled": False,
+                "embedding_model": self._config.rag.default_embedding_model,
+                "total_documents": 0,
+                "last_indexed_at": None,
             }
 
         try:
             status = self._rag_vector_store.get_status_payload()
+            documents_indexed = int(status.get("documents_indexed", 0))
+            total_vectors = int(status.get("total_vectors", 0))
+            embedding_ready = bool(runtime_status.get("embedding_ready"))
+            search_enabled = bool(
+                self._config.rag.enabled
+                and embedding_ready
+                and status.get("initialized")
+                and total_vectors > 0
+            )
             return {
                 "enabled": bool(self._config.rag.enabled),
                 **status,
                 "default_embedding_model": self._config.rag.default_embedding_model,
+                "embedding_model": self._config.rag.default_embedding_model,
+                "total_documents": documents_indexed,
+                "last_indexed_at": status.get("last_indexed_at_utc"),
+                "search_enabled": search_enabled,
+                "retrieval": {
+                    "top_k": self._config.rag.retrieval.top_k,
+                    "similarity_metric": self._config.rag.retrieval.similarity_metric,
+                    "min_similarity": self._config.rag.retrieval.min_similarity,
+                },
             }
         except Exception as exc:  # noqa: BLE001
             self._logger.exception(
@@ -125,6 +147,15 @@ class ControllerService:
                 "embedding_models": [],
                 "index_location": self._config.rag.index.directory,
                 "error": str(exc),
+                "search_enabled": False,
+                "embedding_model": self._config.rag.default_embedding_model,
+                "total_documents": 0,
+                "last_indexed_at": None,
+                "retrieval": {
+                    "top_k": self._config.rag.retrieval.top_k,
+                    "similarity_metric": self._config.rag.retrieval.similarity_metric,
+                    "min_similarity": self._config.rag.retrieval.min_similarity,
+                },
             }
 
     def list_models(self) -> dict[str, Any]:

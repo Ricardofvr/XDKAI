@@ -84,11 +84,19 @@ class RagIndexConfig:
 
 
 @dataclass(frozen=True)
+class RagRetrievalConfig:
+    top_k: int
+    similarity_metric: str
+    min_similarity: float
+
+
+@dataclass(frozen=True)
 class RagConfig:
     enabled: bool
     default_embedding_model: str | None
     chunking: RagChunkingConfig
     index: RagIndexConfig
+    retrieval: RagRetrievalConfig
 
 
 @dataclass(frozen=True)

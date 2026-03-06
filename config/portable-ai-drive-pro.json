@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.7.0-week7",
+    "version": "0.8.0-week8",
     "environment": "development"
   },
   "api": {
@@ -83,6 +83,11 @@
       "vectors_db_filename": "vectors.db",
       "documents_filename": "documents.json",
       "metadata_filename": "metadata.json"
+    },
+    "retrieval": {
+      "top_k": 3,
+      "similarity_metric": "cosine",
+      "min_similarity": -1.0
     }
   },
   "placeholders": {

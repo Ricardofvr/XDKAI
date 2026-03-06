@@ -21,7 +21,7 @@ The LLM is explicitly not the authority for side-effectful actions.
 6. Local Model Runtime
    - Model-agnostic inference adapter for local providers.
 7. Knowledge / RAG Subsystem
-   - Local indexing and context retrieval.
+   - Local indexing, vector search, and context retrieval.
 8. Memory Subsystem
    - User-controlled, erasable long-term adaptation data.
 9. Optional Research Subsystem
@@ -31,7 +31,7 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 7)
+## Implemented Shape (Week 8)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
@@ -41,8 +41,9 @@ Current implementation is in `backend/`:
 - `backend/controller/`: orchestration boundary for introspection, chat completions, and embeddings
 - `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility endpoints
 - `backend/rag/chunking/`: deterministic document chunking
-- `backend/rag/vector_store/`: persistent local vector storage + index metadata
+- `backend/rag/vector_store/`: persistent local vector storage + index metadata + similarity search
 - `backend/rag/indexer.py`: indexing pipeline + CLI entrypoint
+- `backend/rag/retrieval.py`: retrieval service + CLI entrypoint
 
 ## Startup Sequence
 1. Load config from `config/portable-ai-drive-pro.json`.
@@ -89,7 +90,7 @@ Model resolution rules:
 - `POST /v1/chat/completions`
 - `POST /v1/embeddings`
 
-### Chat Flow
+## Chat Flow (Current)
 1. Client sends OpenAI-style payload to `/v1/chat/completions`.
 2. API validates payload and forwards typed request.
 3. Controller validates chat model availability.
@@ -98,7 +99,7 @@ Model resolution rules:
 6. Adapter normalizes response to internal contract.
 7. Controller assembles OpenAI-compatible chat response.
 
-### Embeddings Flow
+## Embeddings Flow (Current)
 1. Client sends OpenAI-style payload to `/v1/embeddings`.
 2. API validates payload (`model`, `input`, `encoding_format`).
 3. Controller validates embedding model availability.
@@ -118,9 +119,32 @@ Model resolution rules:
 4. Persist document metadata + vectors in local vector store.
 5. Update JSON sidecar metadata files.
 
-### Index Storage Layout
+## RAG Retrieval Foundation (Week 8)
+### Retrieval Pipeline
+`Search Service -> Controller -> RuntimeManager -> Runtime Adapter -> Embeddings -> VectorStore`
+
+`backend.rag.retrieval` pipeline steps:
+1. Validate user query.
+2. Generate query embedding via controller/runtime path.
+3. Run vector similarity search in local vector store.
+4. Rank and return top-k chunk matches with similarity and metadata.
+
+### Search Algorithm
+- Metric: cosine similarity.
+- Configurable in `rag.retrieval`:
+  - `top_k`
+  - `similarity_metric`
+  - `min_similarity`
+
+### Current Scope Boundary
+Week 8 adds retrieval capability only.
+Not implemented yet:
+- chat-time automatic context injection
+- reranking/hybrid retrieval
+
+## Index Storage Layout
 Default location: `data/index/`
-- `vectors.db`: SQLite database for vectors + document table.
+- `vectors.db`: SQLite database for documents + vectors (including chunk text and metadata).
 - `documents.json`: indexed document metadata snapshot.
 - `metadata.json`: index-level metadata snapshot.
 
@@ -130,13 +154,6 @@ Tracked metadata includes:
 - `chunk_count`
 - `embedding_model`
 - `indexed_at_utc`
-
-### Current Scope Boundary
-Week 7 adds index creation only.
-Not implemented yet:
-- retrieval-time vector search
-- ranking
-- chat augmentation with retrieved context
 
 ## Failure and Timeout Handling
 Runtime adapter and runtime manager handle:
@@ -154,9 +171,14 @@ Failures are logged with structured diagnostics and returned as structured API e
 - runtime selected/active/fallback provider
 - generation readiness + enabled generation models
 - embeddings readiness + enabled embedding models
-- provider reachability
-- provider diagnostics
-- `rag_index` status (initialized, documents indexed, total vectors, embedding models, index location)
+- provider reachability and diagnostics
+- `rag_index` state:
+  - `search_enabled`
+  - `total_vectors`
+  - `total_documents`
+  - `last_indexed_at`
+  - `embedding_model`
+  - retrieval settings (`top_k`, `similarity_metric`, `min_similarity`)
 
 ## Streaming Readiness
 - Chat request schema supports `stream` field but streaming is not implemented yet.

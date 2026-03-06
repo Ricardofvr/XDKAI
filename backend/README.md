@@ -1,6 +1,6 @@
 # Backend Service
 
-This package contains the Week 7 backend foundation for Portable AI Drive PRO.
+This package contains the Week 8 backend foundation for Portable AI Drive PRO.
 
 ## Responsibilities
 - Startup bootstrap sequencing
@@ -17,6 +17,10 @@ This package contains the Week 7 backend foundation for Portable AI Drive PRO.
   - deterministic chunking (`backend/rag/chunking`)
   - persistent vector store (`backend/rag/vector_store`)
   - document indexing CLI/pipeline (`backend/rag/indexer.py`)
+- RAG retrieval foundation:
+  - query embedding through controller/runtime (`backend/rag/retrieval.py`)
+  - cosine similarity vector search (`backend/rag/vector_store`)
+  - ranked retrieval CLI output for indexed chunks
 
 ## Entrypoints
 - Backend API service:
@@ -24,3 +28,5 @@ This package contains the Week 7 backend foundation for Portable AI Drive PRO.
   - `./scripts/run_backend.sh`
 - Indexing CLI:
   - `python -m backend.rag.indexer index ./docs/sample.txt`
+- Retrieval CLI:
+  - `python -m backend.rag.retrieval search "system architecture"`

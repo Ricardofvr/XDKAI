@@ -36,6 +36,8 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertGreaterEqual(config.rag.chunking.chunk_overlap, 0)
         self.assertTrue(config.rag.index.directory)
         self.assertTrue(config.rag.index.vectors_db_filename.endswith(".db"))
+        self.assertGreater(config.rag.retrieval.top_k, 0)
+        self.assertEqual(config.rag.retrieval.similarity_metric, "cosine")
 
 
 if __name__ == "__main__":

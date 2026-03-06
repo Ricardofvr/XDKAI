@@ -187,6 +187,7 @@ class RagIndexerService:
                     document_id=document_id,
                     chunk_index=chunk.chunk_index,
                     embedding=[float(v) for v in embedding],
+                    chunk_text=chunk.text,
                     text_length=chunk.text_length,
                     metadata={
                         "document_id": document_id,

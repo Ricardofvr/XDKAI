@@ -1,3 +1,3 @@
-from .vector_store import IndexedDocument, SQLiteVectorStore, VectorRecord
+from .vector_store import IndexedDocument, SQLiteVectorStore, VectorRecord, VectorSearchResult
 
-__all__ = ["IndexedDocument", "SQLiteVectorStore", "VectorRecord"]
+__all__ = ["IndexedDocument", "SQLiteVectorStore", "VectorRecord", "VectorSearchResult"]
