@@ -1,12 +1,13 @@
 # Backend Service
 
-This package contains the Week 4 backend skeleton for Portable AI Drive PRO.
+This package contains the Week 5 backend skeleton for Portable AI Drive PRO.
 
 ## Responsibilities
 - Startup bootstrap sequencing
 - Structured config loading
 - Structured logging initialization
 - Runtime provider selection and lifecycle handling
+- Real local inference path via runtime provider adapter
 - Placeholder fallback when selected provider is unavailable
 - Controller initialization
 - Introspection API exposure

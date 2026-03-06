@@ -17,12 +17,12 @@ Use one command for local backend startup:
 
 This runs `python3 -m backend.main --config config/portable-ai-drive-pro.json`.
 
-## Runtime Behavior in Week 4
+## Runtime Behavior in Week 5
 Default config selects `local_openai` runtime with placeholder fallback.
 
-- If local runtime is reachable, provider mode is active.
+- If local runtime is reachable and generation-capable, provider mode is active for real inference.
 - If local runtime is unavailable, placeholder fallback engages automatically.
-- Runtime mode and fallback details are visible in `GET /system/status`.
+- Runtime mode, generation readiness, and fallback details are visible in `GET /system/status`.
 
 ## Endpoint Checks
 After startup, validate:
@@ -44,6 +44,12 @@ curl -sS http://127.0.0.1:8080/v1/chat/completions \
     "stream": false
   }'
 ```
+
+## Real Inference Validation
+To validate real inference (not placeholder), run a local OpenAI-compatible provider separately and point `runtime.local_openai.base_url` at it. Then confirm in `/system/status` that:
+- `runtime.active_provider == "local_openai"`
+- `runtime.generation.generation_ready == true`
+- chat outputs are model-generated provider responses
 
 ## Local-First Workflow
 1. Develop and test all modules locally in repo paths.

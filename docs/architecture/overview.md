@@ -31,7 +31,7 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 4)
+## Implemented Shape (Week 5)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
@@ -55,7 +55,7 @@ Current implementation is in `backend/`:
 Runtime provider is selected through `runtime.provider` in config.
 
 Current options:
-- `local_openai`: concrete local OpenAI-compatible provider adapter path
+- `local_openai`: local OpenAI-compatible provider adapter with real generation path
 - `placeholder`: deterministic fallback runtime
 
 Optional fallback behavior:
@@ -64,7 +64,7 @@ Optional fallback behavior:
 
 If the selected provider is unavailable at startup, runtime manager can engage fallback and expose this explicitly in status.
 
-## Model Registry
+## Model Registry Resolution
 Runtime config defines a structured model registry under `runtime.models` with fields:
 - `public_name`: client-visible model id
 - `provider_model_id`: provider-specific identifier/path
@@ -72,35 +72,43 @@ Runtime config defines a structured model registry under `runtime.models` with f
 - `enabled`: availability toggle
 - `metadata`: future extension area
 
+Model resolution rules:
+- API/controller only use public model names.
+- Runtime adapter maps public model names to provider model IDs.
+- Disabled or unmapped models are rejected with structured errors.
+
 `GET /v1/models` is served from runtime-backed registry data, not hardcoded lists.
 
-## Introspection Endpoints
-- `GET /health`
-- `GET /version`
-- `GET /system/status`
-
-## OpenAI Compatibility Endpoints (Week 4)
-- `GET /v1/models`
-- `POST /v1/chat/completions`
-
-### Chat Request Flow
+## Chat Generation Path (Week 5)
 1. Client sends OpenAI-style payload to `/v1/chat/completions`.
-2. API layer validates payload fields (`model`, `messages`, `temperature`, `max_tokens`, `stream`).
-3. API passes typed request to controller.
-4. Controller validates model availability and routing constraints.
-5. Controller invokes runtime manager chat generation.
-6. Runtime manager calls the active runtime backend (selected or fallback).
-7. Controller assembles OpenAI-compatible response shape.
-8. API returns JSON response and logs request outcome.
+2. API validates fields (`model`, `messages`, `temperature`, `max_tokens`, `stream`) and forwards typed request.
+3. Controller validates model availability against runtime-exposed models.
+4. Runtime manager enforces generation readiness and logs invocation lifecycle.
+5. Runtime adapter maps public model -> provider model ID.
+6. Runtime adapter calls provider `/v1/chat/completions` endpoint.
+7. Adapter normalizes provider response to internal runtime contract.
+8. Controller assembles OpenAI-compatible response shape.
+9. API returns JSON response with request ID.
 
-## Runtime Status Reporting
-`GET /system/status` now reports:
-- selected provider
-- active provider
-- fallback engagement
-- runtime ready/degraded state
-- primary provider diagnostics
-- model registry summary
+## Failure and Timeout Handling
+Runtime adapter and runtime manager handle:
+- provider connection failure
+- timeout
+- malformed provider responses
+- provider HTTP error payloads
+- unavailable or disabled model mapping
+
+Failures are logged with structured diagnostics and returned as structured API errors.
+
+## Runtime Readiness Semantics
+`GET /system/status` now reports readiness beyond startup:
+- selected/active/fallback provider
+- generation readiness
+- provider reachability
+- enabled model count and active model
+- primary provider status snapshot
+- model registry details
+- provider diagnostics (startup error, last chat error, latency)
 
 ## Streaming Readiness
 - Request schema already supports `stream` field.

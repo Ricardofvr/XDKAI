@@ -19,6 +19,8 @@ class RuntimeStatus:
     mode: str
     initialized: bool
     ready: bool
+    generation_ready: bool
+    provider_reachable: bool
     active_model: str | None
     models_available: list[str]
     details: dict[str, Any] = field(default_factory=dict)
@@ -92,4 +94,4 @@ class RuntimeBackend(Protocol):
         """Yield chat tokens/chunks for future streaming support."""
 
     def generate_embeddings(self, inputs: list[str], **kwargs: Any) -> list[list[float]]:
-        """Generate embeddings (not implemented in Week 4)."""
+        """Generate embeddings (not implemented in Week 5)."""

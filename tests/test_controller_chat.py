@@ -3,7 +3,8 @@ import unittest
 
 from backend.config import load_config
 from backend.controller import ControllerRequestError, ControllerService
-from backend.runtime import ChatGenerationRequest, ChatMessage, PlaceholderRuntime, RuntimeManager
+from backend.runtime import ChatGenerationRequest, ChatMessage, ModelInfo, PlaceholderRuntime, RuntimeManager
+from backend.runtime.interfaces import RuntimeInvocationError, RuntimeStatus
 
 
 class ControllerChatTests(unittest.TestCase):
@@ -70,6 +71,21 @@ class ControllerChatTests(unittest.TestCase):
 
         self.assertEqual(err.exception.error_type, "model_not_found")
 
+    def test_chat_completion_rejects_disabled_model(self) -> None:
+        controller, _ = self._build_controller()
+
+        request = ChatGenerationRequest(
+            model="local-coder",
+            messages=[ChatMessage(role="user", content="hello")],
+            stream=False,
+            request_id="req_123",
+        )
+
+        with self.assertRaises(ControllerRequestError) as err:
+            controller.create_chat_completion(request)
+
+        self.assertEqual(err.exception.error_type, "model_not_found")
+
     def test_list_models_returns_openai_style_list(self) -> None:
         controller, model_name = self._build_controller()
         response = controller.list_models()
@@ -92,6 +108,83 @@ class ControllerChatTests(unittest.TestCase):
             controller.create_chat_completion(request)
 
         self.assertEqual(err.exception.error_type, "unsupported_feature")
+
+    def test_controller_propagates_runtime_invocation_errors(self) -> None:
+        config = load_config()
+
+        class _FailingBackend:
+            def startup(self) -> None:
+                return
+
+            def shutdown(self) -> None:
+                return
+
+            def get_status(self) -> RuntimeStatus:
+                return RuntimeStatus(
+                    state="ready",
+                    provider="local_openai",
+                    mode="provider",
+                    initialized=True,
+                    ready=True,
+                    generation_ready=True,
+                    provider_reachable=True,
+                    active_model="local-general",
+                    models_available=["local-general"],
+                    details={},
+                )
+
+            def list_models(self) -> list[ModelInfo]:
+                return [ModelInfo(id="local-general", provider_model_id="llama3.2-general")]
+
+            def list_configured_models(self) -> list[ModelInfo]:
+                return self.list_models()
+
+            def get_metadata(self) -> dict:
+                return {"provider": "local_openai"}
+
+            def generate_chat(self, request: ChatGenerationRequest):
+                raise RuntimeInvocationError("mock provider malformed response")
+
+            def stream_chat(self, request: ChatGenerationRequest):
+                raise NotImplementedError
+
+            def generate_embeddings(self, inputs, **kwargs):
+                raise NotImplementedError
+
+        runtime_manager = RuntimeManager(
+            primary_backend=_FailingBackend(),
+            fallback_backend=None,
+            selected_provider="local_openai",
+            fallback_provider=None,
+            logger=logging.getLogger("test.runtime"),
+        )
+        runtime_manager.startup()
+
+        controller = ControllerService(
+            config=config,
+            runtime_manager=runtime_manager,
+            logger=logging.getLogger("test.controller"),
+            startup_state={
+                "config_loaded": True,
+                "logging_initialized": True,
+                "runtime_initialized": True,
+                "controller_initialized": True,
+                "api_initialized": True,
+            },
+        )
+
+        request = ChatGenerationRequest(
+            model="local-general",
+            messages=[ChatMessage(role="user", content="hello")],
+            stream=False,
+            request_id="req_runtime_invocation",
+        )
+
+        with self.assertRaises(ControllerRequestError) as err:
+            controller.create_chat_completion(request)
+
+        self.assertEqual(err.exception.error_type, "runtime_invocation_error")
+        self.assertEqual(err.exception.status_code, 502)
 
 
 if __name__ == "__main__":

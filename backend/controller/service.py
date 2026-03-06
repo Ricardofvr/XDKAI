@@ -180,7 +180,7 @@ class ControllerService:
         return response
 
     def dispatch_tool(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError("Tool dispatch is deferred to Week 4+")
+        raise NotImplementedError("Tool dispatch is deferred to Week 6+")
 
     def validate_policy(self, action: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError("Policy validation is deferred to Week 4+")
+        raise NotImplementedError("Policy validation is deferred to Week 6+")

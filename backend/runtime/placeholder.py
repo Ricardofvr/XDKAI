@@ -64,10 +64,13 @@ class PlaceholderRuntime:
             mode="placeholder",
             initialized=self._started,
             ready=ready,
+            generation_ready=ready,
+            provider_reachable=ready,
             active_model=self._active_model(),
             models_available=[model.id for model in self._enabled_models()],
             details={
-                "inference_ready": False,
+                "generation_capable": ready,
+                "real_inference": False,
                 "reason": "Placeholder runtime active for deterministic local development flow.",
             },
         )

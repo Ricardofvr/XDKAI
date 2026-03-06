@@ -171,7 +171,7 @@ def _build_request_handler(controller: ControllerService, logger: logging.Logger
 
 
 class ApiServer:
-    """HTTP API service exposing introspection and Week 3 OpenAI-style endpoints."""
+    """HTTP API service exposing introspection and OpenAI-style endpoints."""
 
     def __init__(self, host: str, port: int, controller: ControllerService, logger: logging.Logger) -> None:
         self._host = host

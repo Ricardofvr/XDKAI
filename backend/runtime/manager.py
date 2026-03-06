@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import asdict
 from typing import Any, Iterator
 
@@ -69,6 +70,8 @@ class RuntimeManager:
                 mode="provider",
                 initialized=True,
                 ready=False,
+                generation_ready=False,
+                provider_reachable=False,
                 active_model=None,
                 models_available=[],
                 details={"status_error": str(exc)},
@@ -136,6 +139,7 @@ class RuntimeManager:
                 "active_provider": active_status.provider,
                 "active_state": active_status.state,
                 "fallback_engaged": self._fallback_engaged,
+                "generation_ready": active_status.generation_ready,
             },
         )
 
@@ -163,7 +167,10 @@ class RuntimeManager:
         return self._active_backend.get_status()
 
     def get_status_payload(self) -> dict[str, Any]:
-        active_status = asdict(self.get_status())
+        status = self.get_status()
+        active_status = asdict(status)
+
+        model_registry = self.get_model_registry_payload()
         active_status.update(
             {
                 "selected_provider": self._selected_provider,
@@ -172,26 +179,38 @@ class RuntimeManager:
                 "fallback_engaged": self._fallback_engaged,
                 "startup_errors": list(self._startup_errors),
                 "primary_provider_status": asdict(self._primary_status) if self._primary_status else None,
+                "generation": {
+                    "generation_ready": status.generation_ready,
+                    "provider_reachable": status.provider_reachable,
+                    "model_registry_loaded": len(model_registry) > 0,
+                    "enabled_models_count": len(status.models_available),
+                    "active_model": status.active_model,
+                    "mode": status.mode,
+                },
             }
         )
         return active_status
 
     def get_metadata(self) -> dict[str, object]:
+        status = self.get_status()
         metadata = self._active_backend.get_metadata()
         return {
             **metadata,
             "selected_provider": self._selected_provider,
             "fallback_provider": self._fallback_provider,
             "fallback_engaged": self._fallback_engaged,
+            "generation_ready": status.generation_ready,
+            "provider_reachable": status.provider_reachable,
         }
 
     def list_models(self) -> list[ModelInfo]:
+        status = self.get_status()
         self._logger.info(
             "runtime_list_models",
             extra={
                 "event": "runtime_call",
                 "operation": "list_models",
-                "active_provider": self.get_status().provider,
+                "active_provider": status.provider,
             },
         )
         return self._active_backend.list_models()
@@ -211,11 +230,15 @@ class RuntimeManager:
 
     def generate_chat(self, request: ChatGenerationRequest) -> ChatGenerationResponse:
         status = self.get_status()
-        if not status.ready:
+        if not status.generation_ready:
             raise RuntimeUnavailableError(
-                f"Runtime provider '{status.provider}' is not ready (state={status.state})."
+                (
+                    f"Runtime provider '{status.provider}' is not generation-ready "
+                    f"(state={status.state}, provider_reachable={status.provider_reachable})."
+                )
             )
 
+        started = time.monotonic()
         self._logger.info(
             "runtime_generate_chat",
             extra={
@@ -230,13 +253,51 @@ class RuntimeManager:
 
         try:
             response = self._active_backend.generate_chat(request)
-        except RuntimeUnavailableError:
+        except RuntimeUnavailableError as exc:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            self._logger.warning(
+                "runtime_generate_chat_failed",
+                extra={
+                    "event": "runtime_call",
+                    "operation": "generate_chat_failed",
+                    "request_id": request.request_id,
+                    "active_provider": status.provider,
+                    "error_type": "runtime_unavailable",
+                    "error": str(exc),
+                    "duration_ms": duration_ms,
+                },
+            )
             raise
-        except RuntimeInvocationError:
+        except RuntimeInvocationError as exc:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            self._logger.warning(
+                "runtime_generate_chat_failed",
+                extra={
+                    "event": "runtime_call",
+                    "operation": "generate_chat_failed",
+                    "request_id": request.request_id,
+                    "active_provider": status.provider,
+                    "error_type": "runtime_invocation_error",
+                    "error": str(exc),
+                    "duration_ms": duration_ms,
+                },
+            )
             raise
         except Exception as exc:  # noqa: BLE001
+            duration_ms = int((time.monotonic() - started) * 1000)
+            self._logger.exception(
+                "runtime_generate_chat_exception",
+                extra={
+                    "event": "runtime_call",
+                    "operation": "generate_chat_exception",
+                    "request_id": request.request_id,
+                    "active_provider": status.provider,
+                    "duration_ms": duration_ms,
+                },
+            )
             raise RuntimeInvocationError(f"Unexpected runtime error: {exc}") from exc
 
+        duration_ms = int((time.monotonic() - started) * 1000)
         self._logger.info(
             "runtime_generate_chat_complete",
             extra={
@@ -245,11 +306,13 @@ class RuntimeManager:
                 "model": response.model,
                 "request_id": request.request_id,
                 "active_provider": status.provider,
+                "duration_ms": duration_ms,
             },
         )
         return response
 
     def stream_chat(self, request: ChatGenerationRequest) -> Iterator[ChatGenerationChoice]:
+        status = self.get_status()
         self._logger.info(
             "runtime_stream_chat",
             extra={
@@ -257,7 +320,7 @@ class RuntimeManager:
                 "operation": "stream_chat",
                 "model": request.model,
                 "request_id": request.request_id,
-                "active_provider": self.get_status().provider,
+                "active_provider": status.provider,
             },
         )
         return self._active_backend.stream_chat(request)

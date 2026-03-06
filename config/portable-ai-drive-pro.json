@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.4.0-week4",
+    "version": "0.5.0-week5",
     "environment": "development"
   },
   "api": {
@@ -28,7 +28,7 @@
         "enabled": true,
         "metadata": {
           "description": "Primary local general assistant model",
-          "stage": "week4-bridge"
+          "stage": "week5-real-inference"
         }
       },
       {
