@@ -15,6 +15,8 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertEqual(config.runtime.default_embedding_model, "local-embedding")
         self.assertTrue(config.rag.enabled)
         self.assertEqual(config.rag.default_embedding_model, "local-embedding")
+        self.assertTrue(config.rag.chat.enabled)
+        self.assertGreater(config.rag.chat.max_context_chunks, 0)
 
     def test_load_config_from_explicit_path(self) -> None:
         config = load_config(Path("config/portable-ai-drive-pro.json"))
@@ -38,6 +40,7 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertTrue(config.rag.index.vectors_db_filename.endswith(".db"))
         self.assertGreater(config.rag.retrieval.top_k, 0)
         self.assertEqual(config.rag.retrieval.similarity_metric, "cosine")
+        self.assertTrue(config.rag.chat.context_prefix)
 
 
 if __name__ == "__main__":

@@ -7,10 +7,8 @@ import sys
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from backend.bootstrap import bootstrap_core
-from backend.controller import ControllerService
 from backend.runtime import EmbeddingGenerationRequest
 
 from .vector_store import SQLiteVectorStore
@@ -40,12 +38,17 @@ class RetrievalResponse:
     results: list[RetrievalHit]
 
 
+class RetrievalEmbeddingController(Protocol):
+    def create_embeddings(self, request: EmbeddingGenerationRequest) -> dict[str, Any]:
+        """Return OpenAI-style embeddings response payload."""
+
+
 class RetrievalService:
     """Week 8 retrieval pipeline: query embedding + vector search + ranking."""
 
     def __init__(
         self,
-        controller: ControllerService,
+        controller: RetrievalEmbeddingController,
         vector_store: SQLiteVectorStore,
         logger: logging.Logger,
         default_embedding_model: str,
@@ -205,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
 
     core = None
     try:
+        from backend.bootstrap import bootstrap_core
+
         core = bootstrap_core(config_path=args.config_path)
         retrieval_service = RetrievalService(
             controller=core.controller,

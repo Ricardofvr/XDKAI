@@ -31,19 +31,20 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 8)
+## Implemented Shape (Week 9)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
 - `backend/config/`: typed config schema + file loader
 - `backend/logging_system/`: structured JSON logging initialization
 - `backend/runtime/`: runtime interfaces, provider adapters, provider selection factory, runtime manager
-- `backend/controller/`: orchestration boundary for introspection, chat completions, and embeddings
+- `backend/controller/`: orchestration boundary for introspection, chat completions, embeddings, and RAG chat routing
 - `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility endpoints
 - `backend/rag/chunking/`: deterministic document chunking
 - `backend/rag/vector_store/`: persistent local vector storage + index metadata + similarity search
 - `backend/rag/indexer.py`: indexing pipeline + CLI entrypoint
 - `backend/rag/retrieval.py`: retrieval service + CLI entrypoint
+- `backend/rag/context_builder.py`: retrieved-context prompt construction and message injection helper
 
 ## Startup Sequence
 1. Load config from `config/portable-ai-drive-pro.json`.
@@ -90,15 +91,6 @@ Model resolution rules:
 - `POST /v1/chat/completions`
 - `POST /v1/embeddings`
 
-## Chat Flow (Current)
-1. Client sends OpenAI-style payload to `/v1/chat/completions`.
-2. API validates payload and forwards typed request.
-3. Controller validates chat model availability.
-4. Runtime manager enforces generation readiness.
-5. Runtime adapter maps and invokes provider chat endpoint.
-6. Adapter normalizes response to internal contract.
-7. Controller assembles OpenAI-compatible chat response.
-
 ## Embeddings Flow (Current)
 1. Client sends OpenAI-style payload to `/v1/embeddings`.
 2. API validates payload (`model`, `input`, `encoding_format`).
@@ -136,11 +128,35 @@ Model resolution rules:
   - `similarity_metric`
   - `min_similarity`
 
-### Current Scope Boundary
-Week 8 adds retrieval capability only.
+## RAG Chat Integration (Week 9)
+### Chat + Retrieval Flow
+`Chat Request -> Controller -> RetrievalService -> RuntimeManager (embeddings) -> VectorStore -> ContextBuilder -> RuntimeManager (generation) -> Response`
+
+Controller behavior:
+1. Validate chat request.
+2. Extract latest user message.
+3. If `rag.chat.enabled=true`, run retrieval for that query.
+4. If chunks are returned, build a context block and inject it before the latest user message.
+5. Call generation runtime with the augmented messages.
+6. If retrieval fails, log and continue with normal generation (no hard failure).
+
+### Context Injection Strategy
+- Context is formatted as a `system` message containing:
+  - configurable prefix (`rag.chat.context_prefix`)
+  - selected chunks (up to `rag.chat.max_context_chunks`)
+  - optional source metadata (`rag.chat.include_source_metadata`)
+- Injection point: immediately before the latest user message.
+
+### Debug Mode
+- `rag.chat.debug_retrieval=true` enables chat response `rag_debug` metadata.
+- Intended for local development/troubleshooting only.
+
+## Current Scope Boundary
+Week 9 adds retrieval-augmented chat context injection.
 Not implemented yet:
-- chat-time automatic context injection
 - reranking/hybrid retrieval
+- chat streaming with RAG metadata chunks
+- advanced context-window packing/deduplication
 
 ## Index Storage Layout
 Default location: `data/index/`
@@ -179,6 +195,13 @@ Failures are logged with structured diagnostics and returned as structured API e
   - `last_indexed_at`
   - `embedding_model`
   - retrieval settings (`top_k`, `similarity_metric`, `min_similarity`)
+- `rag_chat` state:
+  - `enabled`
+  - `max_context_chunks`
+  - `index_ready`
+  - `retrieval_enabled`
+  - `include_source_metadata`
+  - `debug_retrieval`
 
 ## Streaming Readiness
 - Chat request schema supports `stream` field but streaming is not implemented yet.

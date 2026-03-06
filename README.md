@@ -2,8 +2,8 @@
 
 Portable AI Drive PRO is a local, offline-first, privacy-first AI operating environment under development in this repository.
 
-## Current Status (Week 8)
-Week 1 through Week 8 foundations are complete:
+## Current Status (Week 9)
+Week 1 through Week 9 foundations are complete:
 - Product and architecture definitions with explicit trust boundaries
 - Backend startup lifecycle, typed file-driven config, structured logging
 - Controller-orchestrated OpenAI-compatible API
@@ -16,12 +16,17 @@ Week 1 through Week 8 foundations are complete:
   - deterministic document chunking
   - indexing pipeline (`Indexer -> Controller -> RuntimeManager -> Embeddings -> VectorStore`)
   - indexing CLI (`python -m backend.rag.indexer index <file>`)
-- RAG retrieval foundation (Week 8):
+- RAG retrieval foundation:
   - query embedding via controller/runtime pipeline
   - cosine similarity search over indexed vectors
   - ranked retrieval results with chunk metadata and previews
   - retrieval CLI (`python -m backend.rag.retrieval search "..."`)
-  - retrieval readiness/status in `GET /system/status` under `rag_index`
+- RAG chat integration (Week 9):
+  - retrieval trigger inside chat pipeline
+  - context injection before the latest user message
+  - fallback to normal chat when retrieval is unavailable/fails
+  - optional retrieval debug metadata in chat response (`rag.chat.debug_retrieval=true`)
+  - RAG chat status in `GET /system/status` under `rag_chat`
 - Standard local Python virtual environment workflow (`.venv`) via `scripts/setup_venv.sh`
 
 ## Core Principles
@@ -81,6 +86,29 @@ JSON output (useful for tooling/tests):
 ```bash
 python -m backend.rag.retrieval search "vector store architecture" --json
 ```
+
+## RAG Chat Test (Week 9)
+1. Index content:
+
+```bash
+python -m backend.rag.indexer index ./docs/sample.txt
+```
+
+2. Ask a question through chat completions:
+
+```bash
+curl -sS http://127.0.0.1:8080/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{
+    "model":"local-general",
+    "messages":[{"role":"user","content":"Explain the system architecture"}],
+    "stream": false
+  }'
+```
+
+Optional debug mode:
+- set `rag.chat.debug_retrieval=true` in config
+- response will include `rag_debug` metadata for retrieval usage/chunks.
 
 ## Index Artifacts
 Index artifacts are persisted under `data/index/`:

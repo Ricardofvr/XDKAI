@@ -175,7 +175,7 @@ class RetrievalCliTests(unittest.TestCase):
             )
 
             stdout = io.StringIO()
-            with patch("backend.rag.retrieval.bootstrap_core", return_value=fake_core):
+            with patch("backend.bootstrap.bootstrap_core", return_value=fake_core):
                 with redirect_stdout(stdout):
                     exit_code = main(["search", "architecture", "--json"])
 

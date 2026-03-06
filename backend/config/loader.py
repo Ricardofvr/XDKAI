@@ -13,6 +13,7 @@ from .schema import (
     LoggingConfig,
     OperatingModeConfig,
     PlaceholderConfig,
+    RagChatConfig,
     RagChunkingConfig,
     RagConfig,
     RagIndexConfig,
@@ -255,6 +256,7 @@ def _parse_rag_config(
             metadata_filename=metadata_filename,
         ),
         retrieval=_parse_rag_retrieval_config(rag_section_raw),
+        chat=_parse_rag_chat_config(rag_section_raw),
     )
 
 
@@ -286,6 +288,43 @@ def _parse_rag_retrieval_config(rag_section_raw: dict[str, Any]) -> RagRetrieval
         top_k=top_k,
         similarity_metric=similarity_metric,
         min_similarity=min_similarity,
+    )
+
+
+def _parse_rag_chat_config(rag_section_raw: dict[str, Any]) -> RagChatConfig:
+    chat_section = rag_section_raw.get("chat", {})
+    if not isinstance(chat_section, dict):
+        raise ConfigError("Config value 'rag.chat' must be an object when provided.")
+
+    enabled = chat_section.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ConfigError("Config value 'rag.chat.enabled' must be a boolean.")
+
+    max_context_chunks = chat_section.get("max_context_chunks", 3)
+    if not isinstance(max_context_chunks, int) or max_context_chunks <= 0:
+        raise ConfigError("Config value 'rag.chat.max_context_chunks' must be a positive integer.")
+
+    context_prefix = chat_section.get(
+        "context_prefix",
+        "You have access to the following local context. Use it when relevant to answer the user question.",
+    )
+    if not isinstance(context_prefix, str) or not context_prefix.strip():
+        raise ConfigError("Config value 'rag.chat.context_prefix' must be a non-empty string.")
+
+    include_source_metadata = chat_section.get("include_source_metadata", True)
+    if not isinstance(include_source_metadata, bool):
+        raise ConfigError("Config value 'rag.chat.include_source_metadata' must be a boolean.")
+
+    debug_retrieval = chat_section.get("debug_retrieval", False)
+    if not isinstance(debug_retrieval, bool):
+        raise ConfigError("Config value 'rag.chat.debug_retrieval' must be a boolean.")
+
+    return RagChatConfig(
+        enabled=enabled,
+        max_context_chunks=max_context_chunks,
+        context_prefix=context_prefix.strip(),
+        include_source_metadata=include_source_metadata,
+        debug_retrieval=debug_retrieval,
     )
 
 

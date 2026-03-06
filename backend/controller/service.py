@@ -7,8 +7,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.config.schema import AppConfig
+from backend.rag.context_builder import build_context_text, inject_context_before_latest_user
+from backend.rag.retrieval import RetrievalService
 from backend.runtime.interfaces import (
     ChatGenerationRequest,
+    ChatMessage,
     EmbeddingGenerationRequest,
     RuntimeInvocationError,
     RuntimeUnavailableError,
@@ -28,18 +31,23 @@ class ControllerService:
         logger: logging.Logger,
         startup_state: dict[str, bool],
         rag_vector_store: Any | None = None,
+        rag_retrieval_service: Any | None = None,
     ) -> None:
         self._config = config
         self._runtime_manager = runtime_manager
         self._logger = logger
         self._startup_state = startup_state
         self._rag_vector_store = rag_vector_store
+        self._rag_retrieval_service = rag_retrieval_service
 
         # Week 2 placeholders for future orchestrated subsystems.
         self._policy_manager = None
         self._tool_dispatcher = None
         self._memory_manager = None
         self._research_manager = None
+
+        if self._rag_retrieval_service is None and self._rag_vector_store is not None:
+            self._rag_retrieval_service = self._build_retrieval_service()
 
     def get_health(self) -> dict[str, Any]:
         runtime_status = self._runtime_manager.get_status_payload()
@@ -66,6 +74,8 @@ class ControllerService:
 
     def get_system_status(self) -> dict[str, Any]:
         runtime_status = self._runtime_manager.get_status_payload()
+        rag_index_status = self._get_rag_index_status(runtime_status=runtime_status)
+        rag_chat_status = self._get_rag_chat_status(rag_index_status=rag_index_status)
         return {
             "startup_state": self._startup_state,
             "environment": self._config.app.environment,
@@ -73,7 +83,8 @@ class ControllerService:
             "runtime": runtime_status,
             "runtime_metadata": self._runtime_manager.get_metadata(),
             "model_registry": self._runtime_manager.get_model_registry_payload(),
-            "rag_index": self._get_rag_index_status(runtime_status=runtime_status),
+            "rag_index": rag_index_status,
+            "rag_chat": rag_chat_status,
             "feature_flags": {
                 "openai_compatible_api": self._config.feature_flags.openai_compatible_api,
                 "tool_execution": self._config.feature_flags.tool_execution,
@@ -90,6 +101,30 @@ class ControllerService:
 
     def mark_startup_step(self, step_name: str, completed: bool = True) -> None:
         self._startup_state[step_name] = completed
+
+    def _build_retrieval_service(self) -> RetrievalService | None:
+        if not self._config.rag.enabled:
+            return None
+
+        try:
+            return RetrievalService(
+                controller=self,
+                vector_store=self._rag_vector_store,
+                logger=self._logger.getChild("rag.retrieval"),
+                default_embedding_model=self._config.rag.default_embedding_model or "",
+                default_top_k=self._config.rag.retrieval.top_k,
+                similarity_metric=self._config.rag.retrieval.similarity_metric,
+                default_min_similarity=self._config.rag.retrieval.min_similarity,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._logger.exception(
+                "controller_rag_retrieval_service_init_failed",
+                extra={
+                    "event": "controller_rag",
+                    "error": str(exc),
+                },
+            )
+            return None
 
     def _get_rag_index_status(self, runtime_status: dict[str, Any]) -> dict[str, Any]:
         if self._rag_vector_store is None:
@@ -158,6 +193,24 @@ class ControllerService:
                 },
             }
 
+    def _get_rag_chat_status(self, rag_index_status: dict[str, Any]) -> dict[str, Any]:
+        index_ready = bool(rag_index_status.get("initialized")) and int(rag_index_status.get("total_vectors", 0)) > 0
+        retrieval_enabled = bool(
+            self._config.rag.enabled
+            and self._config.rag.chat.enabled
+            and rag_index_status.get("search_enabled")
+            and self._rag_retrieval_service is not None
+        )
+
+        return {
+            "enabled": bool(self._config.rag.chat.enabled),
+            "max_context_chunks": self._config.rag.chat.max_context_chunks,
+            "index_ready": index_ready,
+            "retrieval_enabled": retrieval_enabled,
+            "include_source_metadata": self._config.rag.chat.include_source_metadata,
+            "debug_retrieval": self._config.rag.chat.debug_retrieval,
+        }
+
     def list_models(self) -> dict[str, Any]:
         self._logger.info("controller_list_models", extra={"event": "controller_route", "route": "list_models"})
         models = self._runtime_manager.list_models()
@@ -201,8 +254,102 @@ class ControllerService:
                 status_code=404,
             )
 
+        runtime_request = request
+        rag_debug: dict[str, Any] = {
+            "retrieval_triggered": False,
+            "retrieval_used": False,
+            "result_count": 0,
+            "chunks": [],
+            "error": None,
+        }
+
+        if self._config.rag.enabled and self._config.rag.chat.enabled and self._rag_retrieval_service is not None:
+            latest_user = self._extract_latest_user_message(request.messages)
+            if latest_user is not None:
+                rag_debug["retrieval_triggered"] = True
+                self._logger.info(
+                    "controller_rag_retrieval_triggered",
+                    extra={
+                        "event": "controller_rag",
+                        "request_id": request.request_id,
+                        "query_length": len(latest_user.content),
+                        "max_context_chunks": self._config.rag.chat.max_context_chunks,
+                    },
+                )
+
+                try:
+                    retrieval_response = self._rag_retrieval_service.search(
+                        query=latest_user.content,
+                        top_k=self._config.rag.chat.max_context_chunks,
+                    )
+                    rag_debug["result_count"] = retrieval_response.result_count
+
+                    if retrieval_response.results:
+                        selected_hits = retrieval_response.results[: self._config.rag.chat.max_context_chunks]
+                        context_text = build_context_text(
+                            hits=selected_hits,
+                            context_prefix=self._config.rag.chat.context_prefix,
+                            include_source_metadata=self._config.rag.chat.include_source_metadata,
+                        )
+                        augmented_messages = inject_context_before_latest_user(
+                            messages=request.messages,
+                            context_text=context_text,
+                        )
+                        runtime_request = ChatGenerationRequest(
+                            model=request.model,
+                            messages=augmented_messages,
+                            temperature=request.temperature,
+                            max_tokens=request.max_tokens,
+                            stream=request.stream,
+                            request_id=request.request_id,
+                        )
+                        rag_debug["retrieval_used"] = True
+                        rag_debug["chunks"] = [
+                            {
+                                "source_file": hit.source_file,
+                                "chunk_index": hit.chunk_index,
+                                "similarity": round(hit.similarity, 4),
+                            }
+                            for hit in selected_hits
+                        ]
+                        self._logger.info(
+                            "controller_rag_context_injected",
+                            extra={
+                                "event": "controller_rag",
+                                "request_id": request.request_id,
+                                "result_count": retrieval_response.result_count,
+                                "injected_chunks": len(selected_hits),
+                            },
+                        )
+                    else:
+                        self._logger.info(
+                            "controller_rag_no_results",
+                            extra={
+                                "event": "controller_rag",
+                                "request_id": request.request_id,
+                            },
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    rag_debug["error"] = str(exc)
+                    self._logger.warning(
+                        "controller_rag_retrieval_failed",
+                        extra={
+                            "event": "controller_rag",
+                            "request_id": request.request_id,
+                            "error": str(exc),
+                        },
+                    )
+            else:
+                self._logger.info(
+                    "controller_rag_skipped_no_user_message",
+                    extra={
+                        "event": "controller_rag",
+                        "request_id": request.request_id,
+                    },
+                )
+
         try:
-            runtime_response = self._runtime_manager.generate_chat(request)
+            runtime_response = self._runtime_manager.generate_chat(runtime_request)
         except RuntimeUnavailableError as exc:
             raise ControllerRequestError(
                 str(exc),
@@ -226,7 +373,7 @@ class ControllerService:
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
         created_ts = int(time.time())
 
-        response = {
+        response: dict[str, Any] = {
             "id": completion_id,
             "object": "chat.completion",
             "created": created_ts,
@@ -245,6 +392,9 @@ class ControllerService:
             "usage": runtime_response.usage,
         }
 
+        if self._config.rag.chat.debug_retrieval:
+            response["rag_debug"] = rag_debug
+
         self._logger.info(
             "controller_chat_completion_ready",
             extra={
@@ -252,6 +402,8 @@ class ControllerService:
                 "route": "chat_completions",
                 "request_id": request.request_id,
                 "completion_id": completion_id,
+                "rag_retrieval_used": rag_debug["retrieval_used"],
+                "rag_result_count": rag_debug["result_count"],
             },
         )
 
@@ -324,6 +476,12 @@ class ControllerService:
         )
 
         return response
+
+    def _extract_latest_user_message(self, messages: list[ChatMessage]) -> ChatMessage | None:
+        for message in reversed(messages):
+            if message.role == "user" and message.content.strip():
+                return message
+        return None
 
     def dispatch_tool(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError("Tool dispatch is deferred to Week 7+")

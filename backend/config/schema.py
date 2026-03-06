@@ -91,12 +91,22 @@ class RagRetrievalConfig:
 
 
 @dataclass(frozen=True)
+class RagChatConfig:
+    enabled: bool
+    max_context_chunks: int
+    context_prefix: str
+    include_source_metadata: bool
+    debug_retrieval: bool
+
+
+@dataclass(frozen=True)
 class RagConfig:
     enabled: bool
     default_embedding_model: str | None
     chunking: RagChunkingConfig
     index: RagIndexConfig
     retrieval: RagRetrievalConfig
+    chat: RagChatConfig
 
 
 @dataclass(frozen=True)

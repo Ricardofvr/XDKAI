@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.8.0-week8",
+    "version": "0.9.0-week9",
     "environment": "development"
   },
   "api": {
@@ -88,6 +88,13 @@
       "top_k": 3,
       "similarity_metric": "cosine",
       "min_similarity": -1.0
+    },
+    "chat": {
+      "enabled": true,
+      "max_context_chunks": 3,
+      "context_prefix": "You have access to the following local context. Use it when relevant and cite source metadata in your reasoning.",
+      "include_source_metadata": true,
+      "debug_retrieval": false
     }
   },
   "placeholders": {

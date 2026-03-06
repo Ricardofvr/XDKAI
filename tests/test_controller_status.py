@@ -39,6 +39,7 @@ class ControllerStatusTests(unittest.TestCase):
         self.assertIn("feature_flags", status)
         self.assertIn("model_registry", status)
         self.assertIn("rag_index", status)
+        self.assertIn("rag_chat", status)
         self.assertEqual(status["runtime"]["provider"], "placeholder")
         self.assertIn("generation", status["runtime"])
         self.assertIn("embeddings", status["runtime"])
@@ -80,6 +81,9 @@ class ControllerStatusTests(unittest.TestCase):
             self.assertIn("total_vectors", rag_index)
             self.assertIn("search_enabled", rag_index)
             self.assertIn("retrieval", rag_index)
+            rag_chat = status["rag_chat"]
+            self.assertIn("enabled", rag_chat)
+            self.assertIn("retrieval_enabled", rag_chat)
 
 
 if __name__ == "__main__":
