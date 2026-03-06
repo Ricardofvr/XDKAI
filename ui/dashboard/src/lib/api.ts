@@ -35,6 +35,7 @@ export async function getModels(): Promise<ModelsResponse> {
 export async function createChatCompletion(input: {
   model: string;
   message: string;
+  sessionId?: string;
 }): Promise<ChatCompletionResponse> {
   return request<ChatCompletionResponse>("/v1/chat/completions", {
     method: "POST",
@@ -42,6 +43,7 @@ export async function createChatCompletion(input: {
       model: input.model,
       messages: [{ role: "user", content: input.message }],
       stream: false,
+      session_id: input.sessionId,
     }),
   });
 }

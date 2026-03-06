@@ -171,13 +171,16 @@ class RagChatIntegrationTests(unittest.TestCase):
         response = controller.create_chat_completion(request)
 
         self.assertEqual(response["choices"][0]["message"]["content"], "rag-aware-response")
+        self.assertIn("portable_ai", response)
+        self.assertTrue(response["portable_ai"]["session_id"])
         self.assertEqual(retrieval_service.calls, ["Explain architecture"])
         self.assertIsNotNone(backend.last_chat_request)
         assert backend.last_chat_request is not None
-        self.assertEqual(len(backend.last_chat_request.messages), 2)
+        self.assertEqual(len(backend.last_chat_request.messages), 3)
         self.assertEqual(backend.last_chat_request.messages[0].role, "system")
-        self.assertIn("BEGIN_RETRIEVED_CONTEXT", backend.last_chat_request.messages[0].content)
-        self.assertEqual(backend.last_chat_request.messages[1].content, "Explain architecture")
+        self.assertIn("Portable AI Drive PRO", backend.last_chat_request.messages[0].content)
+        self.assertIn("BEGIN_RETRIEVED_CONTEXT", backend.last_chat_request.messages[1].content)
+        self.assertEqual(backend.last_chat_request.messages[2].content, "Explain architecture")
 
     def test_chat_skips_retrieval_when_disabled(self) -> None:
         config = _load_mutated_config(lambda data: data["rag"]["chat"].update({"enabled": False}))
@@ -205,7 +208,7 @@ class RagChatIntegrationTests(unittest.TestCase):
 
         self.assertEqual(retrieval_service.calls, [])
         assert backend.last_chat_request is not None
-        self.assertEqual(len(backend.last_chat_request.messages), 1)
+        self.assertEqual(len(backend.last_chat_request.messages), 2)
 
     def test_chat_falls_back_when_retrieval_errors(self) -> None:
         config = _load_mutated_config(lambda data: data["rag"]["chat"].update({"enabled": True}))
@@ -222,8 +225,8 @@ class RagChatIntegrationTests(unittest.TestCase):
         controller.create_chat_completion(request)
 
         assert backend.last_chat_request is not None
-        self.assertEqual(len(backend.last_chat_request.messages), 1)
-        self.assertEqual(backend.last_chat_request.messages[0].content, "Explain architecture")
+        self.assertEqual(len(backend.last_chat_request.messages), 2)
+        self.assertEqual(backend.last_chat_request.messages[-1].content, "Explain architecture")
 
     def test_chat_debug_mode_includes_rag_debug_payload(self) -> None:
         config = _load_mutated_config(lambda data: data["rag"]["chat"].update({"enabled": True, "debug_retrieval": True}))
@@ -260,6 +263,8 @@ class RagChatIntegrationTests(unittest.TestCase):
 
         response = controller.create_chat_completion(request)
         self.assertIn("rag_debug", response)
+        self.assertIn("portable_ai", response)
+        self.assertIn("session_debug", response["portable_ai"])
         self.assertTrue(response["rag_debug"]["retrieval_triggered"])
         self.assertTrue(response["rag_debug"]["retrieval_used"])
         self.assertEqual(response["rag_debug"]["retrieval_result_count_raw"], 1)
@@ -304,9 +309,40 @@ class RagChatIntegrationTests(unittest.TestCase):
 
         response = controller.create_chat_completion(request)
         assert backend.last_chat_request is not None
-        self.assertEqual(len(backend.last_chat_request.messages), 1)
+        self.assertEqual(len(backend.last_chat_request.messages), 2)
         self.assertFalse(response["rag_debug"]["retrieval_used"])
         self.assertEqual(response["rag_debug"]["skipped_reason"], "retrieval_results_filtered_empty")
+
+    def test_chat_reuses_session_history_on_follow_up_turn(self) -> None:
+        config = _load_mutated_config(lambda data: data["rag"]["chat"].update({"enabled": False}))
+        retrieval_service = _FakeRetrievalService(response=None)
+        controller, backend = self._build_controller(config, retrieval_service)
+
+        first_response = controller.create_chat_completion(
+            ChatGenerationRequest(
+                model="local-general",
+                messages=[ChatMessage(role="user", content="First question")],
+                stream=False,
+                request_id="req_session_1",
+            )
+        )
+        session_id = first_response["portable_ai"]["session_id"]
+
+        controller.create_chat_completion(
+            ChatGenerationRequest(
+                model="local-general",
+                messages=[ChatMessage(role="user", content="Follow-up question")],
+                stream=False,
+                request_id="req_session_2",
+                session_id=session_id,
+            )
+        )
+
+        assert backend.last_chat_request is not None
+        contents = [message.content for message in backend.last_chat_request.messages]
+        self.assertIn("First question", contents)
+        self.assertIn("rag-aware-response", contents)
+        self.assertIn("Follow-up question", contents)
 
 
 if __name__ == "__main__":

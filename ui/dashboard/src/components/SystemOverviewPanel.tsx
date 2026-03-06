@@ -16,6 +16,7 @@ function item(label: string, value: string | number | boolean | null | undefined
 
 export function SystemOverviewPanel({ status, loading }: Props) {
   const runtime = status?.runtime;
+  const sessions = status?.chat_orchestration?.sessions;
 
   return (
     <section className="panel panel-wide">
@@ -32,6 +33,8 @@ export function SystemOverviewPanel({ status, loading }: Props) {
         {item("Embeddings Ready", runtime?.embedding_ready)}
         {item("Active Model", runtime?.active_model)}
         {item("Runtime Mode", runtime?.mode)}
+        {item("Session Store", sessions?.storage_mode)}
+        {item("Sessions In Memory", sessions?.sessions_in_memory)}
       </div>
     </section>
   );

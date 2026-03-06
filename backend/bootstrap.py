@@ -7,6 +7,7 @@ from pathlib import Path
 from backend.api import ApiServer
 from backend.config import load_config
 from backend.config.schema import AppConfig
+from backend.conversation import ConversationSessionManager
 from backend.controller import ControllerService
 from backend.logging_system import configure_structured_logging
 from backend.rag.vector_store import SQLiteVectorStore
@@ -82,9 +83,25 @@ def bootstrap_core(config_path: str | Path | None = None) -> BackendCore:
         "logging_initialized": True,
         "runtime_initialized": True,
         "rag_index_initialized": True,
+        "conversation_initialized": True,
         "controller_initialized": True,
         "api_initialized": False,
     }
+
+    session_manager = ConversationSessionManager(
+        directory=config.chat.session.directory,
+        persist_to_disk=config.chat.session.persist_to_disk,
+        logger=logger.getChild("conversation.sessions"),
+    )
+    logger.info(
+        "conversation_initialized",
+        extra={
+            "event": "startup_step",
+            "step": "conversation_initialized",
+            "directory": config.chat.session.directory,
+            "persist_to_disk": config.chat.session.persist_to_disk,
+        },
+    )
 
     controller = ControllerService(
         config=config,
@@ -92,6 +109,7 @@ def bootstrap_core(config_path: str | Path | None = None) -> BackendCore:
         logger=logger.getChild("controller"),
         startup_state=startup_state,
         rag_vector_store=vector_store,
+        session_manager=session_manager,
     )
     logger.info("controller_initialized", extra={"event": "startup_step", "step": "controller_initialized"})
 

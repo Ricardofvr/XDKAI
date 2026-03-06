@@ -17,6 +17,8 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertEqual(config.rag.default_embedding_model, "local-embedding")
         self.assertTrue(config.rag.chat.enabled)
         self.assertGreater(config.rag.chat.max_context_chunks, 0)
+        self.assertTrue(config.chat.session.directory)
+        self.assertGreater(config.chat.history.max_turns, 0)
         self.assertGreaterEqual(config.rag.chat.retrieval_fetch_k, config.rag.chat.max_context_chunks)
         self.assertGreater(config.rag.chat.max_context_characters, 0)
         self.assertGreater(config.rag.chat.max_chunks_per_document, 0)
@@ -46,6 +48,8 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertTrue(config.rag.chat.context_prefix)
         self.assertIsInstance(config.rag.chat.deduplicate_results, bool)
         self.assertGreaterEqual(config.rag.chat.near_duplicate_threshold, 0.0)
+        self.assertIsInstance(config.chat.include_session_metadata, bool)
+        self.assertIsInstance(config.chat.debug_session, bool)
 
 
 if __name__ == "__main__":

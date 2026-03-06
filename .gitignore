@@ -3,5 +3,6 @@ __pycache__/
 .venv/
 data/logs/*.log
 data/index/
+data/sessions/
 ui/dashboard/node_modules/
 ui/dashboard/dist/

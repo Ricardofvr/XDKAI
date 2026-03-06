@@ -70,6 +70,33 @@ class FeatureFlagsConfig:
 
 
 @dataclass(frozen=True)
+class ChatSessionConfig:
+    directory: str
+    persist_to_disk: bool
+
+
+@dataclass(frozen=True)
+class ChatHistoryConfig:
+    max_turns: int
+    max_characters: int
+    retain_system_prompt: bool
+
+
+@dataclass(frozen=True)
+class ChatSystemPromptConfig:
+    text: str
+
+
+@dataclass(frozen=True)
+class ChatConfig:
+    include_session_metadata: bool
+    debug_session: bool
+    session: ChatSessionConfig
+    history: ChatHistoryConfig
+    system_prompt: ChatSystemPromptConfig
+
+
+@dataclass(frozen=True)
 class RagChunkingConfig:
     chunk_size: int
     chunk_overlap: int
@@ -131,6 +158,7 @@ class AppConfig:
     runtime: RuntimeConfig
     operating_mode: OperatingModeConfig
     feature_flags: FeatureFlagsConfig
+    chat: ChatConfig
     rag: RagConfig
     placeholders: PlaceholderConfig
     raw: dict[str, Any] = field(default_factory=dict, repr=False)

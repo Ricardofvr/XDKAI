@@ -53,6 +53,7 @@ class ChatGenerationRequest:
     max_tokens: int | None = None
     stream: bool = False
     request_id: str | None = None
+    session_id: str | None = None
 
 
 @dataclass(frozen=True)

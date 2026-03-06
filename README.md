@@ -2,8 +2,8 @@
 
 Portable AI Drive PRO is a local, offline-first, privacy-first AI operating environment under development in this repository.
 
-## Current Status (Week 10 + Dashboard v0.1)
-Week 1 through Week 10 foundations are complete:
+## Current Status (Week 11 + Dashboard v0.1)
+Week 1 through Week 11 foundations are complete:
 - Product and architecture definitions with explicit trust boundaries
 - Backend startup lifecycle, typed file-driven config, structured logging
 - Controller-orchestrated OpenAI-compatible API
@@ -33,6 +33,12 @@ Week 1 through Week 10 foundations are complete:
   - configurable context budgeting (`max_context_chunks` + `max_context_characters`)
   - improved context format for clearer grounding boundaries
   - request-level retrieval diagnostics persisted in `GET /system/status` (`rag_chat.last_retrieval_diagnostics`)
+- Conversation orchestration (Week 11):
+  - backend session manager (`data/sessions`) for short-term multi-turn continuity
+  - optional `session_id` support on `/v1/chat/completions`
+  - controller-owned prompt assembler (`system prompt -> RAG context -> history window -> latest user`)
+  - history windowing via `chat.history.max_turns` and `chat.history.max_characters`
+  - session-aware debug metadata in chat responses (`portable_ai.session_debug`)
 - Dashboard v0.1 (post-Week 9 milestone):
   - local React-based developer control center
   - system overview and diagnostics panels
@@ -110,7 +116,7 @@ JSON output (useful for tooling/tests):
 python -m backend.rag.retrieval search "vector store architecture" --json
 ```
 
-## RAG Chat Test (Week 10 Quality Path)
+## RAG + Session Chat Test (Week 11)
 1. Index content:
 
 ```bash
@@ -124,6 +130,7 @@ curl -sS http://127.0.0.1:8080/v1/chat/completions \
   -H 'content-type: application/json' \
   -d '{
     "model":"local-general",
+    "session_id":"sess_demo_001",
     "messages":[{"role":"user","content":"Explain the system architecture"}],
     "stream": false
   }'
@@ -132,6 +139,8 @@ curl -sS http://127.0.0.1:8080/v1/chat/completions \
 Optional debug mode:
 - set `rag.chat.debug_retrieval=true` in config
 - response will include `rag_debug` metadata with retrieval counts, filtering, budgeting, and source chunks.
+- set `chat.debug_session=true` in config
+- response will include `portable_ai.session_debug` metadata with history/prompt assembly diagnostics.
 
 ## Week 10 RAG Tuning Knobs
 `config/portable-ai-drive-pro.json` -> `rag.chat`:
@@ -143,6 +152,17 @@ Optional debug mode:
 - `near_duplicate_threshold`
 - `min_similarity`
 
+## Week 11 Session Controls
+`config/portable-ai-drive-pro.json`:
+- `chat.session.directory`
+- `chat.session.persist_to_disk`
+- `chat.history.max_turns`
+- `chat.history.max_characters`
+- `chat.history.retain_system_prompt`
+- `chat.system_prompt.text`
+- `chat.include_session_metadata`
+- `chat.debug_session`
+
 ## Dashboard v0.1
 Dashboard v0.1 is an internal testing cockpit for development.
 It is not the final product UI, but it is wired to real backend endpoints.
@@ -150,7 +170,7 @@ It is not the final product UI, but it is wired to real backend endpoints.
 Sections:
 - System Overview
 - Models
-- Chat Test
+- Chat Test (with optional `session_id` continuity)
 - Retrieval Test
 - RAG Index Overview
 - Diagnostics

@@ -8,6 +8,10 @@ from .schema import (
     ApiConfig,
     AppConfig,
     AppIdentityConfig,
+    ChatConfig,
+    ChatHistoryConfig,
+    ChatSessionConfig,
+    ChatSystemPromptConfig,
     FeatureFlagsConfig,
     LocalOpenAIProviderConfig,
     LoggingConfig,
@@ -263,6 +267,80 @@ def _parse_rag_config(
     )
 
 
+def _parse_chat_config(data: dict[str, Any]) -> ChatConfig:
+    chat_section_raw = data.get("chat", {})
+    if not isinstance(chat_section_raw, dict):
+        raise ConfigError("Config section 'chat' must be an object when provided.")
+
+    include_session_metadata = chat_section_raw.get("include_session_metadata", True)
+    if not isinstance(include_session_metadata, bool):
+        raise ConfigError("Config value 'chat.include_session_metadata' must be a boolean.")
+
+    debug_session = chat_section_raw.get("debug_session", False)
+    if not isinstance(debug_session, bool):
+        raise ConfigError("Config value 'chat.debug_session' must be a boolean.")
+
+    session_section = chat_section_raw.get("session", {})
+    if not isinstance(session_section, dict):
+        raise ConfigError("Config value 'chat.session' must be an object when provided.")
+
+    session_directory = session_section.get("directory", "data/sessions")
+    if not isinstance(session_directory, str) or not session_directory.strip():
+        raise ConfigError("Config value 'chat.session.directory' must be a non-empty string.")
+    resolved_session_dir = Path(session_directory)
+    if not resolved_session_dir.is_absolute():
+        resolved_session_dir = (PROJECT_ROOT / resolved_session_dir).resolve()
+
+    persist_to_disk = session_section.get("persist_to_disk", True)
+    if not isinstance(persist_to_disk, bool):
+        raise ConfigError("Config value 'chat.session.persist_to_disk' must be a boolean.")
+
+    history_section = chat_section_raw.get("history", {})
+    if not isinstance(history_section, dict):
+        raise ConfigError("Config value 'chat.history' must be an object when provided.")
+
+    max_turns = history_section.get("max_turns", 8)
+    if not isinstance(max_turns, int) or max_turns <= 0:
+        raise ConfigError("Config value 'chat.history.max_turns' must be a positive integer.")
+
+    max_characters = history_section.get("max_characters", 7000)
+    if not isinstance(max_characters, int) or max_characters <= 0:
+        raise ConfigError("Config value 'chat.history.max_characters' must be a positive integer.")
+
+    retain_system_prompt = history_section.get("retain_system_prompt", True)
+    if not isinstance(retain_system_prompt, bool):
+        raise ConfigError("Config value 'chat.history.retain_system_prompt' must be a boolean.")
+
+    system_prompt_section = chat_section_raw.get("system_prompt", {})
+    if not isinstance(system_prompt_section, dict):
+        raise ConfigError("Config value 'chat.system_prompt' must be an object when provided.")
+
+    system_prompt_text = system_prompt_section.get(
+        "text",
+        (
+            "You are Portable AI Drive PRO, a private local assistant. "
+            "Be concise, accurate, and explicit about uncertainty."
+        ),
+    )
+    if not isinstance(system_prompt_text, str):
+        raise ConfigError("Config value 'chat.system_prompt.text' must be a string.")
+
+    return ChatConfig(
+        include_session_metadata=include_session_metadata,
+        debug_session=debug_session,
+        session=ChatSessionConfig(
+            directory=str(resolved_session_dir),
+            persist_to_disk=persist_to_disk,
+        ),
+        history=ChatHistoryConfig(
+            max_turns=max_turns,
+            max_characters=max_characters,
+            retain_system_prompt=retain_system_prompt,
+        ),
+        system_prompt=ChatSystemPromptConfig(text=system_prompt_text.strip()),
+    )
+
+
 def _parse_rag_retrieval_config(rag_section_raw: dict[str, Any]) -> RagRetrievalConfig:
     retrieval_section = rag_section_raw.get("retrieval", {})
     if not isinstance(retrieval_section, dict):
@@ -453,6 +531,7 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
         enabled_embedding_names=enabled_embedding_names,
         runtime_default_embedding_model=default_embedding_model,
     )
+    chat_config = _parse_chat_config(data)
 
     app_config = AppConfig(
         app=AppIdentityConfig(
@@ -491,6 +570,7 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
             memory=_require_bool(feature_flags_section, "memory", "feature_flags"),
             research=_require_bool(feature_flags_section, "research", "feature_flags"),
         ),
+        chat=chat_config,
         rag=rag_config,
         placeholders=PlaceholderConfig(
             policy_rules=_optional_dict(placeholders_section, "policy_rules", "placeholders"),

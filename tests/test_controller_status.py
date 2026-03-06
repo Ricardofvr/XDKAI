@@ -40,12 +40,14 @@ class ControllerStatusTests(unittest.TestCase):
         self.assertIn("model_registry", status)
         self.assertIn("rag_index", status)
         self.assertIn("rag_chat", status)
+        self.assertIn("chat_orchestration", status)
         self.assertEqual(status["runtime"]["provider"], "placeholder")
         self.assertIn("generation", status["runtime"])
         self.assertIn("embeddings", status["runtime"])
         self.assertIn("max_context_characters", status["rag_chat"])
         self.assertIn("deduplicate_results", status["rag_chat"])
         self.assertIn("min_similarity", status["rag_chat"])
+        self.assertIn("sessions", status["chat_orchestration"])
 
     def test_system_status_includes_rag_index_payload(self) -> None:
         config = load_config()

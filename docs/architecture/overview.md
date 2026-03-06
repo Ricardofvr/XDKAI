@@ -31,15 +31,17 @@ The LLM is explicitly not the authority for side-effectful actions.
 11. Packaging/Deployment Target (future)
    - External SSD distribution profile and portable runtime packaging.
 
-## Implemented Shape (Week 10)
+## Implemented Shape (Week 11)
 Current implementation is in `backend/`:
 - `backend/main.py`: process entrypoint
 - `backend/bootstrap.py`: startup sequencing and dependency wiring
 - `backend/config/`: typed config schema + file loader
 - `backend/logging_system/`: structured JSON logging initialization
 - `backend/runtime/`: runtime interfaces, provider adapters, provider selection factory, runtime manager
-- `backend/controller/`: orchestration boundary for introspection, chat completions, embeddings, and RAG chat routing
+- `backend/controller/`: orchestration boundary for introspection, chat completions, embeddings, and session-aware RAG chat routing
 - `backend/api/`: HTTP service with introspection routes and `/v1/*` compatibility endpoints
+- `backend/conversation/session_manager.py`: local session identity + short-term turn history store
+- `backend/conversation/prompt_assembler.py`: system prompt + history window + RAG context assembly
 - `backend/rag/chunking/`: deterministic document chunking
 - `backend/rag/vector_store/`: persistent local vector storage + index metadata + similarity search
 - `backend/rag/indexer.py`: indexing pipeline + CLI entrypoint
@@ -54,9 +56,10 @@ Current implementation is in `backend/`:
 4. Start runtime manager lifecycle.
 5. If selected provider is unavailable, optionally engage placeholder fallback.
 6. Initialize RAG vector store (`data/index/*`).
-7. Initialize controller with runtime manager + RAG status provider.
-8. Initialize API server and route bindings.
-9. Start serving local requests.
+7. Initialize conversation/session manager (`data/sessions/*` by default).
+8. Initialize controller with runtime manager + RAG + conversation services.
+9. Initialize API server and route bindings.
+10. Start serving local requests.
 
 ## Runtime Provider Selection
 Runtime provider is selected through `runtime.provider` in config.
@@ -92,6 +95,23 @@ Model resolution rules:
 - `POST /v1/chat/completions`
 - `POST /v1/embeddings`
 - `POST /internal/rag/search` (internal dashboard retrieval test bridge)
+- `POST /v1/chat/completions` supports optional `session_id` extension for multi-turn continuity.
+
+## Conversation Orchestration (Week 11)
+### Session-Aware Chat Flow
+`Chat Request -> Controller -> SessionManager -> RetrievalService (optional) -> ContextBuilder -> PromptAssembler -> RuntimeManager (generation) -> SessionManager append turn -> Response`
+
+Controller behavior:
+1. Resolve or create session (`session_id` or generated `sess_*` id).
+2. Seed empty sessions from incoming request history when needed.
+3. Read stored conversation history for that session.
+4. Retrieve and filter RAG context from latest user message (when enabled).
+5. Assemble final prompt via prompt assembler:
+   - configured system prompt
+   - optional retrieved context
+   - windowed history (turn + character budgets)
+   - latest user message
+6. Run generation runtime and append user/assistant turns back into session storage.
 
 ## Embeddings Flow (Current)
 1. Client sends OpenAI-style payload to `/v1/embeddings`.
@@ -130,9 +150,9 @@ Model resolution rules:
   - `similarity_metric`
   - `min_similarity`
 
-## RAG Chat Integration (Week 9-10)
+## RAG Chat Integration (Week 9-11)
 ### Chat + Retrieval Flow
-`Chat Request -> Controller -> RetrievalService -> RuntimeManager (embeddings) -> VectorStore -> RetrievalPostprocessing -> ContextBuilder -> RuntimeManager (generation) -> Response`
+`Chat Request -> Controller -> SessionManager -> RetrievalService -> RuntimeManager (embeddings) -> VectorStore -> RetrievalPostprocessing -> ContextBuilder -> PromptAssembler -> RuntimeManager (generation) -> Response`
 
 Controller behavior:
 1. Validate chat request.
@@ -143,8 +163,8 @@ Controller behavior:
    - exact duplicate + near-duplicate suppression
    - same-document chunk limiting
    - context budgeting (`max_context_chunks`, `max_context_characters`)
-5. If filtered chunks are returned, build a context block and inject it before the latest user message.
-6. Call generation runtime with the augmented messages.
+5. If filtered chunks are returned, build a context block.
+6. Merge system prompt + context + session history + latest user via prompt assembler.
 7. If retrieval fails or filtered context is empty, log and continue with normal generation (no hard failure).
 
 ### Context Injection Strategy
@@ -153,7 +173,7 @@ Controller behavior:
   - clearly delimited retrieved context block (`BEGIN_RETRIEVED_CONTEXT` / `END_RETRIEVED_CONTEXT`)
   - selected chunks (bounded by chunk + character budgets)
   - optional source metadata (`rag.chat.include_source_metadata`)
-- Injection point: immediately before the latest user message.
+- Injection point: prompt assembler inserts RAG context as a dedicated `system` message before history and latest user turn.
 
 ### Debug Mode
 - `rag.chat.debug_retrieval=true` enables chat response `rag_debug` metadata.
@@ -161,11 +181,12 @@ Controller behavior:
 - Intended for local development/troubleshooting only.
 
 ## Current Scope Boundary
-Week 10 adds retrieval quality controls for cleaner RAG context injection.
+Week 11 adds short-term session memory and prompt orchestration for multi-turn chat.
 Not implemented yet:
 - reranking/hybrid retrieval
 - chat streaming with RAG metadata chunks
 - learned reranking models
+- long-term memory/persistent user profiling
 
 ## Dashboard v0.1 (UI Milestone)
 - Local React dashboard under `ui/dashboard`.
@@ -227,6 +248,11 @@ Failures are logged with structured diagnostics and returned as structured API e
   - `include_source_metadata`
   - `debug_retrieval`
   - `last_retrieval_diagnostics`
+- `chat_orchestration` state:
+  - history limits (`max_turns`, `max_characters`, `retain_system_prompt`)
+  - system prompt configured flag
+  - session metadata flags (`include_session_metadata`, `debug_session`)
+  - session store status (`storage_mode`, `directory`, `sessions_in_memory`, `sessions_persisted`)
 
 ## Streaming Readiness
 - Chat request schema supports `stream` field but streaming is not implemented yet.

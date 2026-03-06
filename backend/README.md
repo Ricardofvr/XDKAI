@@ -1,6 +1,6 @@
 # Backend Service
 
-This package contains the Week 10 backend foundation for Portable AI Drive PRO.
+This package contains the Week 11 backend foundation for Portable AI Drive PRO.
 
 ## Responsibilities
 - Startup bootstrap sequencing
@@ -31,6 +31,13 @@ This package contains the Week 10 backend foundation for Portable AI Drive PRO.
   - tunable quality controls in config (`rag.chat.*`):
     - `retrieval_fetch_k`, `max_context_chunks`, `max_context_characters`
     - `max_chunks_per_document`, `deduplicate_results`, `near_duplicate_threshold`, `min_similarity`
+- Conversation/session orchestration:
+  - session manager (`backend/conversation/session_manager.py`)
+  - prompt assembly module (`backend/conversation/prompt_assembler.py`)
+  - session-aware chat flow (`/v1/chat/completions` with optional `session_id`)
+  - bounded history windowing (`chat.history.max_turns`, `chat.history.max_characters`)
+  - configurable system prompt layer (`chat.system_prompt.text`)
+  - session debug metadata (`portable_ai.session_debug`)
 
 ## Entrypoints
 - Backend API service:

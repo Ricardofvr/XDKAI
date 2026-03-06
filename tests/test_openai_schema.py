@@ -19,6 +19,7 @@ class OpenAISchemaTests(unittest.TestCase):
             "temperature": 0.3,
             "max_tokens": 128,
             "stream": False,
+            "session_id": "sess_demo_1",
         }
 
         request = parse_chat_completions_request(payload, request_id="req_test")
@@ -28,6 +29,7 @@ class OpenAISchemaTests(unittest.TestCase):
         self.assertEqual(request.messages[1].role, "user")
         self.assertEqual(request.messages[1].content, "hello")
         self.assertFalse(request.stream)
+        self.assertEqual(request.session_id, "sess_demo_1")
 
     def test_parse_chat_request_missing_model(self) -> None:
         payload = {
@@ -41,6 +43,16 @@ class OpenAISchemaTests(unittest.TestCase):
         payload = {
             "model": "local-general",
             "messages": "not-an-array",
+        }
+
+        with self.assertRaises(ApiValidationError):
+            parse_chat_completions_request(payload, request_id="req_test")
+
+    def test_parse_chat_request_invalid_session_id(self) -> None:
+        payload = {
+            "model": "local-general",
+            "messages": [{"role": "user", "content": "hello"}],
+            "session_id": "",
         }
 
         with self.assertRaises(ApiValidationError):

@@ -88,6 +88,15 @@ def parse_chat_completions_request(payload: Any, request_id: str | None = None) 
     if not isinstance(stream, bool):
         raise ApiValidationError("Field 'stream' must be a boolean.", request_id=request_id)
 
+    session_id_raw = body.get("session_id")
+    session_id: str | None = None
+    if session_id_raw is not None:
+        session_id = _require_non_empty_str(
+            session_id_raw,
+            message="Field 'session_id' must be a non-empty string when provided.",
+            request_id=request_id,
+        )
+
     return ChatGenerationRequest(
         model=model,
         messages=messages,
@@ -95,6 +104,7 @@ def parse_chat_completions_request(payload: Any, request_id: str | None = None) 
         max_tokens=max_tokens,
         stream=stream,
         request_id=request_id,
+        session_id=session_id,
     )
 
 

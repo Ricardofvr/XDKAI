@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portable AI Drive PRO",
-    "version": "0.10.0-week10",
+    "version": "0.11.0-week11",
     "environment": "development"
   },
   "api": {
@@ -70,6 +70,22 @@
     "tool_execution": false,
     "memory": false,
     "research": false
+  },
+  "chat": {
+    "include_session_metadata": true,
+    "debug_session": true,
+    "session": {
+      "directory": "data/sessions",
+      "persist_to_disk": true
+    },
+    "history": {
+      "max_turns": 8,
+      "max_characters": 7000,
+      "retain_system_prompt": true
+    },
+    "system_prompt": {
+      "text": "You are Portable AI Drive PRO, a private local assistant. Use retrieved local context when relevant, avoid unsupported claims, and be concise."
+    }
   },
   "rag": {
     "enabled": true,

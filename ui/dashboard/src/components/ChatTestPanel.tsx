@@ -12,12 +12,15 @@ type ChatEntry = {
   prompt: string;
   response?: string;
   error?: string;
+  sessionId?: string;
+  sessionDebug?: Record<string, unknown>;
   ragDebug?: Record<string, unknown>;
 };
 
 export function ChatTestPanel({ models }: Props) {
   const modelOptions = useMemo(() => (models?.data ?? []).map((model) => model.id), [models]);
   const [model, setModel] = useState<string>("local-general");
+  const [sessionId, setSessionId] = useState("");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [entries, setEntries] = useState<ChatEntry[]>([]);
@@ -28,17 +31,34 @@ export function ChatTestPanel({ models }: Props) {
     }
 
     const prompt = input.trim();
-    const entry: ChatEntry = { id: crypto.randomUUID(), prompt };
+    const activeSessionId = sessionId.trim() || undefined;
+    const entry: ChatEntry = { id: crypto.randomUUID(), prompt, sessionId: activeSessionId };
     setEntries((prev) => [entry, ...prev]);
     setInput("");
     setSending(true);
 
     try {
-      const response: ChatCompletionResponse = await createChatCompletion({ model, message: prompt });
+      const response: ChatCompletionResponse = await createChatCompletion({
+        model,
+        message: prompt,
+        sessionId: activeSessionId,
+      });
       const answer = response.choices[0]?.message?.content ?? "(empty response)";
+      const responseSessionId = response.portable_ai?.session_id;
+      if (responseSessionId) {
+        setSessionId(responseSessionId);
+      }
       setEntries((prev) =>
         prev.map((item) =>
-          item.id === entry.id ? { ...item, response: answer, ragDebug: response.rag_debug } : item
+          item.id === entry.id
+            ? {
+                ...item,
+                response: answer,
+                sessionId: responseSessionId ?? item.sessionId,
+                sessionDebug: response.portable_ai?.session_debug,
+                ragDebug: response.rag_debug,
+              }
+            : item
         )
       );
     } catch (error) {
@@ -66,8 +86,19 @@ export function ChatTestPanel({ models }: Props) {
             ))}
           </select>
         </label>
+        <label>
+          Session ID
+          <input
+            value={sessionId}
+            onChange={(event) => setSessionId(event.target.value)}
+            placeholder="Auto-generated if empty"
+          />
+        </label>
         <button onClick={onSend} disabled={sending || !input.trim()}>
           {sending ? "Sending..." : "Send"}
+        </button>
+        <button type="button" onClick={() => setSessionId("")} disabled={sending}>
+          New Session
         </button>
       </div>
       <textarea
@@ -82,12 +113,18 @@ export function ChatTestPanel({ models }: Props) {
             <p>
               <strong>User:</strong> {entry.prompt}
             </p>
+            {entry.sessionId ? (
+              <p>
+                <strong>Session:</strong> {entry.sessionId}
+              </p>
+            ) : null}
             {entry.response ? (
               <p>
                 <strong>Assistant:</strong> {entry.response}
               </p>
             ) : null}
             {entry.error ? <p className="error-text">{entry.error}</p> : null}
+            {entry.sessionDebug ? <pre>{JSON.stringify(entry.sessionDebug, null, 2)}</pre> : null}
             {entry.ragDebug ? <pre>{JSON.stringify(entry.ragDebug, null, 2)}</pre> : null}
           </div>
         ))}

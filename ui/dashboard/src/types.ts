@@ -53,6 +53,13 @@ export type SystemStatus = {
   environment?: string;
   offline_mode?: boolean;
   runtime?: RuntimeStatus;
+  chat_orchestration?: {
+    sessions?: {
+      storage_mode?: string;
+      sessions_in_memory?: number;
+      sessions_persisted?: number;
+    };
+  };
   model_registry?: ModelRegistryEntry[];
   rag_index?: RagIndexStatus;
   rag_chat?: RagChatStatus;
@@ -84,6 +91,11 @@ export type ChatCompletionResponse = {
     message: ChatMessage;
     finish_reason: string;
   }>;
+  portable_ai?: {
+    session_id?: string;
+    session_created?: boolean;
+    session_debug?: Record<string, unknown>;
+  };
   rag_debug?: Record<string, unknown>;
 };
 
